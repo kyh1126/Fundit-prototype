@@ -139,4 +139,54 @@ describe("NFT", function () {
       ).to.be.rejected;
     });
   });
+
+  describe("Metadata Management", function () {
+    it("Should allow token owner to update token URI", async function () {
+      const { nft, owner, addr1, addr1Client } = await loadFixture(deployNFTFixture);
+      const initialURI = "ipfs://QmTest1";
+      const newURI = "ipfs://QmTest2";
+      
+      await nft.write.safeMint([addr1, initialURI]);
+      await nft.write.updateTokenURI([1n, newURI], { account: addr1Client.account });
+      
+      expect(await nft.read.tokenURI([1n])).to.equal(newURI);
+      expect(await nft.read.getMetadataVersion([1n])).to.equal(1n);
+    });
+
+    it("Should fail if non-owner tries to update token URI", async function () {
+      const { nft, owner, addr1, addr2, addr2Client } = await loadFixture(deployNFTFixture);
+      const initialURI = "ipfs://QmTest1";
+      const newURI = "ipfs://QmTest2";
+      
+      await nft.write.safeMint([addr1, initialURI]);
+      await expect(
+        nft.write.updateTokenURI([1n, newURI], { account: addr2Client.account })
+      ).to.be.rejected;
+    });
+
+    it("Should fail to update non-existent token URI", async function () {
+      const { nft, owner, addr1, addr1Client } = await loadFixture(deployNFTFixture);
+      const newURI = "ipfs://QmTest2";
+      
+      await expect(
+        nft.write.updateTokenURI([1n, newURI], { account: addr1Client.account })
+      ).to.be.rejected;
+    });
+
+    it("Should increment metadata version on update", async function () {
+      const { nft, owner, addr1, addr1Client } = await loadFixture(deployNFTFixture);
+      const initialURI = "ipfs://QmTest1";
+      const newURI1 = "ipfs://QmTest2";
+      const newURI2 = "ipfs://QmTest3";
+      
+      await nft.write.safeMint([addr1, initialURI]);
+      expect(await nft.read.getMetadataVersion([1n])).to.equal(0n);
+      
+      await nft.write.updateTokenURI([1n, newURI1], { account: addr1Client.account });
+      expect(await nft.read.getMetadataVersion([1n])).to.equal(1n);
+      
+      await nft.write.updateTokenURI([1n, newURI2], { account: addr1Client.account });
+      expect(await nft.read.getMetadataVersion([1n])).to.equal(2n);
+    });
+  });
 }); 
