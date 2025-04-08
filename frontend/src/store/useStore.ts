@@ -29,6 +29,8 @@ interface Proposal {
   proposer: string
   status: string
   bids: Bid[]
+  isActive: boolean
+  createdAt: bigint
 }
 
 type Store = {
@@ -78,6 +80,8 @@ export const useStore = create<Store>((set, get) => {
             proposer: proposal.proposer,
             status: proposal.isActive ? 'Active' : 'Inactive',
             bids: [],
+            isActive: proposal.isActive,
+            createdAt: proposal.createdAt,
           })
         }
         set({ proposals, loading: false })
