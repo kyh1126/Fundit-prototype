@@ -199,6 +199,81 @@ class ContractManager {
     }
 
     /**
+     * @description 청구 정보 조회
+     * @param {number} contractId - 계약 ID
+     * @returns {Promise<Object>} 청구 정보
+     */
+    async getClaim(contractId) {
+        try {
+            const claim = await this.contract.claims(contractId);
+            return {
+                contractId: claim.contractId.toString(),
+                description: claim.description,
+                amount: ethers.formatEther(claim.amount),
+                submittedAt: new Date(claim.submittedAt * 1000).toISOString(),
+                isProcessed: claim.isProcessed,
+                isApproved: claim.isApproved,
+                processedAt: claim.processedAt > 0 ? new Date(claim.processedAt * 1000).toISOString() : null
+            };
+        } catch (error) {
+            console.error("청구 정보 조회 중 오류 발생:", error);
+            throw error;
+        }
+    }
+
+    /**
+     * @description 청구 처리자 추가
+     * @param {string} processor - 처리자 주소
+     * @returns {Promise<Object>} 트랜잭션 결과
+     */
+    async addClaimProcessor(processor) {
+        try {
+            const tx = await this.contract.addClaimProcessor(processor);
+            const receipt = await tx.wait();
+            console.log("청구 처리자가 추가되었습니다:", receipt);
+            return receipt;
+        } catch (error) {
+            console.error("청구 처리자 추가 중 오류 발생:", error);
+            throw error;
+        }
+    }
+
+    /**
+     * @description 청구 처리자 제거
+     * @param {string} processor - 처리자 주소
+     * @returns {Promise<Object>} 트랜잭션 결과
+     */
+    async removeClaimProcessor(processor) {
+        try {
+            const tx = await this.contract.removeClaimProcessor(processor);
+            const receipt = await tx.wait();
+            console.log("청구 처리자가 제거되었습니다:", receipt);
+            return receipt;
+        } catch (error) {
+            console.error("청구 처리자 제거 중 오류 발생:", error);
+            throw error;
+        }
+    }
+
+    /**
+     * @description 계약 오라클 설정
+     * @param {number} contractId - 계약 ID
+     * @param {string} oracleAddress - 오라클 주소
+     * @returns {Promise<Object>} 트랜잭션 결과
+     */
+    async setContractOracle(contractId, oracleAddress) {
+        try {
+            const tx = await this.contract.setContractOracle(contractId, oracleAddress);
+            const receipt = await tx.wait();
+            console.log("계약 오라클이 설정되었습니다:", receipt);
+            return receipt;
+        } catch (error) {
+            console.error("계약 오라클 설정 중 오류 발생:", error);
+            throw error;
+        }
+    }
+
+    /**
      * @description 리뷰 제출
      * @param {number} contractId - 계약 ID
      * @param {string} content - 리뷰 내용
@@ -264,6 +339,118 @@ class ContractManager {
             return score.toString();
         } catch (error) {
             console.error("리뷰 점수 조회 중 오류 발생:", error);
+            throw error;
+        }
+    }
+    
+    /**
+     * @description 사용자 리뷰 수 조회
+     * @param {string} address - 조회할 주소
+     * @returns {Promise<number>} 리뷰 수
+     */
+    async getUserReviewCount(address) {
+        try {
+            const count = await this.tokenContract.getUserReviewCount(address);
+            return count.toString();
+        } catch (error) {
+            console.error("리뷰 수 조회 중 오류 발생:", error);
+            throw error;
+        }
+    }
+    
+    /**
+     * @description 사용자 총 보상 금액 조회
+     * @param {string} address - 조회할 주소
+     * @returns {Promise<string>} 총 보상 금액
+     */
+    async getUserTotalRewards(address) {
+        try {
+            const rewards = await this.tokenContract.getUserTotalRewards(address);
+            return ethers.formatEther(rewards);
+        } catch (error) {
+            console.error("총 보상 금액 조회 중 오류 발생:", error);
+            throw error;
+        }
+    }
+    
+    /**
+     * @description 추가 정보 보상 지급
+     * @param {string} user - 사용자 주소
+     * @param {number} infoScore - 정보 점수 (3-10)
+     * @returns {Promise<Object>} 트랜잭션 결과
+     */
+    async rewardAdditionalInfo(user, infoScore) {
+        try {
+            const tx = await this.tokenContract.rewardAdditionalInfo(user, infoScore);
+            const receipt = await tx.wait();
+            console.log("추가 정보 보상이 지급되었습니다:", receipt);
+            return receipt;
+        } catch (error) {
+            console.error("추가 정보 보상 지급 중 오류 발생:", error);
+            throw error;
+        }
+    }
+    
+    /**
+     * @description 컨트랙트 일시 중지
+     * @returns {Promise<Object>} 트랜잭션 결과
+     */
+    async pauseContract() {
+        try {
+            const tx = await this.contract.pause();
+            const receipt = await tx.wait();
+            console.log("컨트랙트가 일시 중지되었습니다:", receipt);
+            return receipt;
+        } catch (error) {
+            console.error("컨트랙트 일시 중지 중 오류 발생:", error);
+            throw error;
+        }
+    }
+    
+    /**
+     * @description 컨트랙트 재개
+     * @returns {Promise<Object>} 트랜잭션 결과
+     */
+    async unpauseContract() {
+        try {
+            const tx = await this.contract.unpause();
+            const receipt = await tx.wait();
+            console.log("컨트랙트가 재개되었습니다:", receipt);
+            return receipt;
+        } catch (error) {
+            console.error("컨트랙트 재개 중 오류 발생:", error);
+            throw error;
+        }
+    }
+    
+    /**
+     * @description 토큰 컨트랙트 일시 중지
+     * @returns {Promise<Object>} 트랜잭션 결과
+     */
+    async pauseTokenContract() {
+        try {
+            const tx = await this.tokenContract.pause();
+            const receipt = await tx.wait();
+            console.log("토큰 컨트랙트가 일시 중지되었습니다:", receipt);
+            return receipt;
+        } catch (error) {
+            console.error("토큰 컨트랙트 일시 중지 중 오류 발생:", error);
+            throw error;
+        }
+    }
+    
+    /**
+     * @description 토큰 컨트랙트 재개
+     * @returns {Promise<Object>} 트랜잭션 결과
+     */
+    async unpauseTokenContract() {
+        try {
+            const tx = await this.tokenContract.unpause();
+            const receipt = await tx.wait();
+            console.log("토큰 컨트랙트가 재개되었습니다:", receipt);
+            return receipt;
+        } catch (error) {
+            console.error("토큰 컨트랙트 재개 중 오류 발생:", error);
             throw error;
         }
     }
