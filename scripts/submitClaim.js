@@ -1,25 +1,33 @@
 const ContractManager = require("./ContractManager");
-const { ethers } = require("ethers");
+const { ethers } = require("hardhat");
 
 require("dotenv").config();
 
-const main = async () => {
-  const CA = "0xaF30C3c1485232d5876707cEf7bB930F0e7a89d2";
-  const TOKEN_CA = "0x..."; // Replace with actual token contract address
+async function main() {
+  // 컨트랙트 주소 설정
+  const CA = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+  const TOKEN_CA = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
 
+  // 컨트랙트 매니저 초기화
   const manager = new ContractManager(CA, TOKEN_CA);
-  
-  // Submit a claim
-  await manager.submitClaim(
-    1, // Contract ID
-    "Medical expenses for emergency surgery", // Description
-    ethers.parseEther("0.5") // Amount (0.5 ETH)
-  );
-  
-  // Process the claim (in a real implementation, this would be done by the oracle)
-  // For this example, we'll use a dummy request ID
-  const dummyRequestId = ethers.ZeroHash;
-  await manager.processClaim(1, dummyRequestId);
-};
+  await manager.initialize();
 
-main(); 
+  // 보험금 청구 제출
+  const contractId = 0; // 청구할 계약 ID
+  const description = "자동차 사고로 인한 수리비 청구";
+  const amount = "0.5"; // ETH 단위
+
+  console.log("보험금 청구를 제출합니다...");
+  await manager.submitClaim(contractId, description, amount);
+
+  // 청구 처리 (실제 환경에서는 오라클 응답을 기다려야 함)
+  console.log("청구를 처리합니다...");
+  await manager.processClaim(contractId);
+}
+
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  }); 
