@@ -13,7 +13,13 @@ type ContractProposal = {
   createdAt: bigint
 }
 
-export type Proposal = {
+export interface Bid {
+  bidder: string;
+  amount: bigint;
+  timestamp: number;
+}
+
+interface Proposal {
   id: number
   title: string
   description: string
@@ -21,8 +27,8 @@ export type Proposal = {
   coverage: bigint
   duration: number
   proposer: string
-  isActive: boolean
-  createdAt: number
+  status: string
+  bids: Bid[]
 }
 
 type Store = {
@@ -70,8 +76,8 @@ export const useStore = create<Store>((set, get) => {
             coverage: proposal.coverage,
             duration: Number(proposal.duration),
             proposer: proposal.proposer,
-            isActive: proposal.isActive,
-            createdAt: Number(proposal.createdAt),
+            status: proposal.isActive ? 'Active' : 'Inactive',
+            bids: [],
           })
         }
         set({ proposals, loading: false })
