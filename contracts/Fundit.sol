@@ -70,13 +70,13 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     mapping(address => uint256[]) public userContracts;
     mapping(address => uint256[]) public companyContracts;
     
-    // Oracle related variables
+    // Oracle 관련 변수
     mapping(uint256 => address) public contractOracles;
     mapping(uint256 => bool) public claimsProcessed;
     mapping(uint256 => uint256) public claimAmounts;
     mapping(uint256 => bool) public claimsApproved;
     
-    // Review related variables
+    // 리뷰 관련 변수
     struct Review {
         uint256 contractId;
         address reviewer;
@@ -89,7 +89,7 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     mapping(uint256 => Review) public reviews;
     mapping(uint256 => bool) public hasReview;
     
-    // Token contract
+    // 토큰 컨트랙트
     FunditToken public funditToken;
     
     // 이벤트
@@ -428,10 +428,10 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     }
     
     /**
-     * @dev Submit a claim for an insurance contract
-     * @param contractId The ID of the insurance contract
-     * @param description Description of the claim
-     * @param amount The claimed amount
+     * @dev 보험금 청구 제출
+     * @param contractId 계약 ID
+     * @param description 청구 설명
+     * @param amount 청구 금액
      */
     function submitClaim(uint256 contractId, string memory description, uint256 amount) external nonReentrant whenNotPaused {
         require(contracts[contractId].exists, "Contract does not exist");
@@ -446,9 +446,9 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     }
     
     /**
-     * @dev Set oracle address for a contract (only owner)
-     * @param contractId The ID of the insurance contract
-     * @param oracleAddress The address of the Chainlink oracle
+     * @dev 계약 오라클 설정 (소유자만 가능)
+     * @param contractId 계약 ID
+     * @param oracleAddress 체인링크 오라클 주소
      */
     function setContractOracle(uint256 contractId, address oracleAddress) external onlyOwner {
         require(contracts[contractId].exists, "Contract does not exist");
@@ -456,9 +456,9 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     }
     
     /**
-     * @dev Process a claim using Chainlink oracle
-     * @param contractId The ID of the insurance contract
-     * @param requestId The Chainlink request ID
+     * @dev 체인링크 오라클을 사용하여 청구 처리
+     * @param contractId 계약 ID
+     * @param requestId 체인링크 요청 ID
      */
     function processClaim(uint256 contractId, bytes32 requestId) external nonReentrant whenNotPaused {
         require(contracts[contractId].exists, "Contract does not exist");
@@ -484,8 +484,8 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     }
     
     /**
-     * @dev Internal function to process payment
-     * @param contractId The ID of the insurance contract
+     * @dev 내부 지급 처리 함수
+     * @param contractId 계약 ID
      */
     function _processPayment(uint256 contractId) internal {
         require(contracts[contractId].exists, "Contract does not exist");
@@ -525,18 +525,18 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     }
     
     /**
-     * @dev Set the FunditToken contract address
-     * @param tokenAddress The address of the FunditToken contract
+     * @dev FunditToken 컨트랙트 주소 설정
+     * @param tokenAddress FunditToken 컨트랙트 주소
      */
     function setFunditToken(address tokenAddress) external onlyOwner {
         funditToken = FunditToken(tokenAddress);
     }
     
     /**
-     * @dev Submit a review for an insurance contract
-     * @param contractId The ID of the insurance contract
-     * @param content The review content
-     * @param rating The rating (1-5)
+     * @dev 보험 계약에 대한 리뷰 제출
+     * @param contractId 계약 ID
+     * @param content 리뷰 내용
+     * @param rating 평점 (1-5)
      */
     function submitReview(uint256 contractId, string memory content, uint256 rating) external nonReentrant whenNotPaused {
         require(contracts[contractId].exists, "Contract does not exist");
@@ -586,9 +586,9 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     }
     
     /**
-     * @dev Get the review for an insurance contract
-     * @param contractId The ID of the insurance contract
-     * @return The review
+     * @dev 보험 계약의 리뷰 조회
+     * @param contractId 계약 ID
+     * @return 리뷰
      */
     function getReview(uint256 contractId) external view returns (Review memory) {
         require(hasReview[contractId], "Review does not exist");
