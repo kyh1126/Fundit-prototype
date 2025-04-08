@@ -19,23 +19,59 @@ contract FunditToken is ERC20, Ownable, Pausable {
     // 사용자 총 보상 금액 매핑
     mapping(address => uint256) public userTotalRewards;
 
-    // 기본 리뷰 보상 (10 토큰)
-    uint256 public constant BASE_REVIEW_REWARD = 10 * 10**18;
-    // 최대 리뷰 보상 (50 토큰)
-    uint256 public constant MAX_REVIEW_REWARD = 50 * 10**18;
+    // 리뷰 품질 평가 관련 상수
+    uint256 public constant MIN_REVIEW_LENGTH = 100;  // 최소 리뷰 길이 (100자)
+    uint256 public constant MAX_REVIEW_LENGTH = 2000; // 최대 리뷰 길이 (2000자)
+    uint256 public constant MIN_RATING = 1;           // 최소 평점
+    uint256 public constant MAX_RATING = 5;           // 최대 평점
+    uint256 public constant BASE_REVIEW_REWARD = 10 * 10**18;  // 기본 리뷰 보상 (10 토큰)
+    uint256 public constant MAX_REVIEW_REWARD = 50 * 10**18;   // 최대 리뷰 보상 (50 토큰)
+    uint256 public constant REWARD_PER_POINT = 5 * 10**18;     // 점수당 보상 (5 토큰)
+    uint256 public constant CONTINUOUS_REVIEW_BONUS = 10;      // 연속 리뷰 보너스 (10%)
     
-    // 리뷰 품질 점수별 보상 계수 (1점당 5 토큰)
-    uint256 public constant REWARD_PER_POINT = 5 * 10**18;
+    // 리뷰 품질 점수 계산 함수
+    function calculateReviewScore(
+        string memory content,
+        uint256 rating,
+        uint256 userReviewCount
+    ) public pure returns (uint256) {
+        // 내용 길이 점수 계산
+        uint256 contentLength = bytes(content).length;
+        require(contentLength >= MIN_REVIEW_LENGTH, "리뷰가 너무 짧습니다");
+        require(contentLength <= MAX_REVIEW_LENGTH, "리뷰가 너무 깁니다");
+        
+        uint256 lengthScore;
+        if (contentLength >= 1000) {
+            lengthScore = 10;
+        } else if (contentLength >= 500) {
+            lengthScore = 8;
+        } else if (contentLength >= 300) {
+            lengthScore = 6;
+        } else if (contentLength >= 200) {
+            lengthScore = 4;
+        } else {
+            lengthScore = 2;
+        }
+        
+        // 평점 검증
+        require(rating >= MIN_RATING && rating <= MAX_RATING, "유효하지 않은 평점입니다");
+        
+        // 기본 점수 계산 (길이 점수 * 평점)
+        uint256 baseScore = (lengthScore * rating) / MAX_RATING;
+        
+        // 연속 리뷰 보너스 계산
+        uint256 continuousBonus = 0;
+        if (userReviewCount > 0) {
+            continuousBonus = (baseScore * CONTINUOUS_REVIEW_BONUS) / 100;
+        }
+        
+        // 최종 점수 계산
+        uint256 finalScore = baseScore + continuousBonus;
+        require(finalScore <= 10, "최대 점수를 초과했습니다");
+        
+        return finalScore;
+    }
     
-    // 연속 리뷰 작성 보너스 (10% 증가)
-    uint256 public constant CONTINUOUS_REVIEW_BONUS = 10;
-    
-    // 최소 리뷰 길이 (50자)
-    uint256 public constant MIN_REVIEW_LENGTH = 50;
-    
-    // 최소 리뷰 정보 점수 (3점)
-    uint256 public constant MIN_INFO_SCORE = 3;
-
     // 리뷰 보상 이벤트
     event ReviewRewarded(address indexed user, uint256 amount, uint256 score, uint256 reviewCount);
     
@@ -57,33 +93,30 @@ contract FunditToken is ERC20, Ownable, Pausable {
     /**
      * @dev 리뷰 보상 지급
      * @param user 사용자 주소
-     * @param score 리뷰 품질 점수 (1-10)
+     * @param content 리뷰 내용
+     * @param rating 평점 (1-5)
      */
-    function rewardReview(address user, uint256 score) public onlyOwner whenNotPaused {
-        require(score >= 1 && score <= 10, "점수는 1에서 10 사이여야 합니다");
+    function rewardReview(
+        address user,
+        string memory content,
+        uint256 rating
+    ) public onlyOwner whenNotPaused {
+        // 리뷰 품질 점수 계산
+        uint256 qualityScore = calculateReviewScore(content, rating, userReviewCounts[user]);
         
-        // 점수에 따른 보상 계산
-        uint256 baseReward = BASE_REVIEW_REWARD + ((score - 1) * REWARD_PER_POINT);
+        // 보상 계산
+        uint256 baseReward = BASE_REVIEW_REWARD + ((qualityScore - 1) * REWARD_PER_POINT);
+        require(baseReward <= MAX_REVIEW_REWARD, "보상이 최대 한도를 초과합니다");
         
-        // 연속 리뷰 작성 보너스 계산
-        uint256 continuousBonus = 0;
-        if (userReviewCounts[user] > 0) {
-            continuousBonus = (baseReward * CONTINUOUS_REVIEW_BONUS) / 100;
-        }
-        
-        // 총 보상 계산
-        uint256 totalReward = baseReward + continuousBonus;
-        require(totalReward <= MAX_REVIEW_REWARD, "보상이 최대 한도를 초과합니다");
-
         // 사용자 정보 업데이트
-        userReviewScores[user] = score;
+        userReviewScores[user] = qualityScore;
         userReviewCounts[user]++;
-        userTotalRewards[user] += totalReward;
+        userTotalRewards[user] += baseReward;
         
         // 토큰 발행
-        _mint(user, totalReward);
-
-        emit ReviewRewarded(user, totalReward, score, userReviewCounts[user]);
+        _mint(user, baseReward);
+        
+        emit ReviewRewarded(user, baseReward, qualityScore, userReviewCounts[user]);
     }
     
     /**
@@ -92,10 +125,10 @@ contract FunditToken is ERC20, Ownable, Pausable {
      * @param infoScore 정보 점수 (1-10)
      */
     function rewardAdditionalInfo(address user, uint256 infoScore) public onlyOwner whenNotPaused {
-        require(infoScore >= MIN_INFO_SCORE && infoScore <= 10, "정보 점수는 3에서 10 사이여야 합니다");
+        require(infoScore >= 3 && infoScore <= 10, "정보 점수는 3에서 10 사이여야 합니다");
         
         // 정보 점수에 따른 보상 계산 (최대 20 토큰)
-        uint256 infoReward = ((infoScore - MIN_INFO_SCORE + 1) * 2 * 10**18);
+        uint256 infoReward = ((infoScore - 3 + 1) * 2 * 10**18);
         
         // 사용자 정보 업데이트
         userTotalRewards[user] += infoReward;
