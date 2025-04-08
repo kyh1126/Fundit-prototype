@@ -1,121 +1,73 @@
-# NFT Smart Contract Project
+# Fundit - Web3 보험 크라우드펀딩 플랫폼
 
-이 프로젝트는 Hardhat과 OpenZeppelin을 사용하여 구현된 NFT(Non-Fungible Token) 스마트 컨트랙트입니다.
+## 🇰🇷 한국어
 
-## 기능
+### 프로젝트 소개
+Fundit은 Web3 기반의 양방향 참여형 보험 크라우드펀딩 플랫폼입니다. 기존의 보험 시장에서는 보험사가 상품을 만들고 소비자가 선택하는 단방향 구조였지만, Fundit에서는 사용자가 직접 보험 상품을 제안하고 보험사가 이를 입찰할 수 있는 혁신적인 플랫폼입니다.
 
-### 기본 NFT 기능
-- ERC721 표준 준수
-- 토큰 민팅
-- 토큰 URI 관리
-- 토큰 소유권 관리
+### 핵심 가치
+- **사용자 중심**: 사용자가 원하는 보험 상품을 직접 제안하고 설계
+- **투명성**: 블록체인 기반으로 모든 거래 내역이 공개되고 검증 가능
+- **효율성**: 스마트 컨트랙트를 통한 자동화된 계약 체결 및 보험금 지급
+- **보상**: 참여자들에게 토큰 보상을 통한 인센티브 제공
 
-### 보안 기능
-- 소유자 권한 관리 (Ownable)
-- 일시 정지 기능 (Pausable)
-- 토큰 소유자만 메타데이터 업데이트 가능
+### 주요 기능
 
-### 배치 민팅
-- 여러 토큰을 한 번에 민팅 가능
-- 최대 100개까지 한 번에 민팅 가능
-- 가스 최적화된 배치 이벤트 사용
+### 1. 보험 상품 제안
+- 사용자가 원하는 보험 상품의 세부 조건을 제안
+- 제안 시 필요한 정보: 제목, 설명, 보험료, 보장금액, 보험 기간
+- 제안된 상품은 블록체인에 기록되어 투명하게 관리
 
-### 메타데이터 관리
-- 토큰 소유자가 URI 업데이트 가능
-- 메타데이터 버전 관리 시스템
-- 메타데이터 업데이트 이벤트 발생
+### 2. 보험사 입찰
+- 등록된 보험사만 입찰 가능
+- 입찰 시 제시 정보: 보험료, 보장금액, 보장 조건
+- 여러 보험사의 경쟁 입찰을 통해 최적의 조건 도출
 
-## 설치 방법
+### 3. 자동 계약 체결
+- 입찰 수락 시 스마트 컨트랙트를 통한 자동 계약 체결
+- 계약 조건이 블록체인에 기록되어 변경 불가
+- 계약 기간 동안 자동으로 보험료 관리
 
+### 4. 보험금 청구 및 지급
+- Chainlink 오라클을 활용한 자동화된 보험금 청구 검증
+- 청구 제출 후 오라클의 검증을 통한 자동 지급
+- 투명하고 신뢰할 수 있는 보험금 지급 프로세스
+
+### 5. DAO 토큰 보상
+- 리뷰 작성 시 품질에 따른 토큰 보상
+- 리뷰 품질 점수 시스템 (1-10점)
+- 토큰 보상을 통한 플랫폼 참여 유도
+
+### 기술 스택
+- **스마트 컨트랙트**: Solidity, OpenZeppelin
+- **오라클**: Chainlink
+- **개발 환경**: Hardhat, TypeScript
+- **테스트**: Chai, Mocha
+
+### 설치 및 실행
 ```bash
-# 저장소 클론
-git clone [repository-url]
-
 # 의존성 설치
 npm install
-```
 
-## 테스트 실행
+# 컨트랙트 컴파일
+npx hardhat compile
 
-```bash
+# 테스트 실행
 npx hardhat test
+
+# 로컬 네트워크 실행
+npx hardhat node
+
+# 컨트랙트 배포
+npx hardhat run scripts/deploy.js --network localhost
 ```
 
-## 주요 함수
+### 스크립트 사용법
+- **보험 제안**: `npx hardhat run scripts/proposeInsurance.js --network localhost`
+- **입찰**: `npx hardhat run scripts/placeBid.js --network localhost`
+- **계약 생성**: `npx hardhat run scripts/createContract.js --network localhost`
+- **보험금 청구**: `npx hardhat run scripts/submitClaim.js --network localhost`
+- **리뷰 작성**: `npx hardhat run scripts/submitReview.js --network localhost`
 
-### 민팅
-```solidity
-// 단일 토큰 민팅
-function safeMint(address to, string memory uri) public onlyOwner whenNotPaused
-
-// 배치 민팅
-function batchMint(address to, string[] memory uris) public onlyOwner whenNotPaused
-```
-
-### 메타데이터 관리
-```solidity
-// URI 업데이트
-function updateTokenURI(uint256 tokenId, string memory _tokenURI) public
-
-// 메타데이터 버전 조회
-function getMetadataVersion(uint256 tokenId) public view returns (uint256)
-```
-
-### 일시 정지
-```solidity
-// 컨트랙트 일시 정지
-function pause() public onlyOwner
-
-// 컨트랙트 정지 해제
-function unpause() public onlyOwner
-```
-
-## 이벤트
-
-### BatchMinted
-배치 민팅 시 발생하는 이벤트
-```solidity
-event BatchMinted(
-    address indexed to,
-    uint256 startTokenId,
-    uint256 count,
-    string[] uris
-)
-```
-
-### MetadataUpdated
-메타데이터 업데이트 시 발생하는 이벤트
-```solidity
-event MetadataUpdated(
-    uint256 indexed tokenId,
-    string newURI,
-    uint256 version
-)
-```
-
-## 보안 고려사항
-
-1. 소유자 권한
-   - 민팅은 컨트랙트 소유자만 가능
-   - 일시 정지는 소유자만 가능
-
-2. 토큰 소유자 권한
-   - 메타데이터 업데이트는 토큰 소유자만 가능
-
-3. 배치 민팅 제한
-   - 최대 100개까지만 한 번에 민팅 가능
-   - 빈 배열로 민팅 시도 시 실패
-
-## 가스 최적화
-
-1. 배치 민팅
-   - 단일 이벤트로 여러 토큰의 민팅 기록
-   - 최적화된 토큰 ID 할당 로직
-
-2. 메타데이터 관리
-   - 효율적인 버전 관리 시스템
-   - 필요한 경우에만 이벤트 발생
-
-## 라이선스
-
-MIT
+## License
+This project is licensed under the MIT License.

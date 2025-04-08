@@ -1,5 +1,4 @@
 const ContractManager = require("./ContractManager");
-
 require("dotenv").config();
 
 const main = async () => {
@@ -7,10 +6,7 @@ const main = async () => {
 
   const manager = new ContractManager(CA);
   await manager.getOwner();
-  await manager.safeMint(
-    "0xEF70277aBF02aEa645F04A0689B2eC9e67CEa670",
-    "https://gateway.pinata.cloud/ipfs/QmZ1YzZ3o6Qv9b5J6jyjv5zXJ6tX7k8vqgU1WbQx4m8KZm"
-  );
+  await manager.getProposal(1); // Check proposal with ID 1
 };
 
-main();
+main(); 

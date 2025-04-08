@@ -1,10 +1,19 @@
 import type { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox-viem";
-
-require("dotenv").config();
+import "@nomicfoundation/hardhat-viem";
+import "@typechain/hardhat";
+import "dotenv/config";
 
 const config: HardhatUserConfig = {
-  solidity: "0.8.28",
+  solidity: {
+    version: "0.8.28",
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 200
+      }
+    }
+  },
 
   networks: {
     baseSepoliaTestnet: {
@@ -12,6 +21,11 @@ const config: HardhatUserConfig = {
       accounts: process.env.TESTNET_PRIVATE_KEY ? [process.env.TESTNET_PRIVATE_KEY] : [],
       chainId: 84532,
     },
+  },
+
+  typechain: {
+    outDir: "typechain-types",
+    target: "ethers-v6",
   },
 };
 
