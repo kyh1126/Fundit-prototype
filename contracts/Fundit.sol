@@ -75,6 +75,9 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     mapping(uint256 => bool) public claimsProcessed;
     mapping(uint256 => uint256) public claimAmounts;
     mapping(uint256 => bool) public claimsApproved;
+    mapping(uint256 => uint256) public claimTimestamps;
+    mapping(uint256 => uint256) public claimVerificationCounts;
+    mapping(uint256 => mapping(address => bool)) public oracleVerifications;
     
     // 리뷰 관련 변수
     struct Review {
@@ -111,6 +114,11 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     uint256 public constant MAX_BID_DURATION = 7 days;
     uint256 public constant MIN_CONTRACT_DURATION = 1 days;
     uint256 public constant MAX_CONTRACT_DURATION = 365 days;
+    
+    // Oracle 검증 관련 상수
+    uint256 public constant MIN_VERIFICATION_COUNT = 3;
+    uint256 public constant VERIFICATION_TIMEOUT = 1 days;
+    uint256 public constant MAX_CLAIM_AMOUNT = 1000 ether;
     
     // 생성자
     constructor() Ownable() {}
@@ -434,15 +442,62 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
      * @param amount 청구 금액
      */
     function submitClaim(uint256 contractId, string memory description, uint256 amount) external nonReentrant whenNotPaused {
-        require(contracts[contractId].exists, "Contract does not exist");
-        require(contracts[contractId].proposer == msg.sender, "Not contract owner");
-        require(!claimsProcessed[contractId], "Claim already processed");
-        require(amount <= contracts[contractId].coverage, "Claim amount exceeds coverage");
+        require(contracts[contractId].exists, "계약이 존재하지 않습니다");
+        require(contracts[contractId].proposer == msg.sender, "계약 소유자가 아닙니다");
+        require(!claimsProcessed[contractId], "이미 처리된 청구입니다");
+        require(amount <= contracts[contractId].coverage, "청구 금액이 보장 금액을 초과합니다");
+        require(amount <= MAX_CLAIM_AMOUNT, "청구 금액이 최대 한도를 초과합니다");
         
-        // Store claim details
+        // 청구 정보 저장
         claimAmounts[contractId] = amount;
+        claimTimestamps[contractId] = block.timestamp;
+        claimVerificationCounts[contractId] = 0;
         
         emit ClaimSubmitted(contractId, description, amount);
+    }
+    
+    /**
+     * @dev Oracle 검증 결과 제출
+     * @param contractId 계약 ID
+     * @param approved 승인 여부
+     * @param evidence 증거
+     */
+    function submitOracleVerification(
+        uint256 contractId,
+        bool approved,
+        string memory evidence
+    ) external nonReentrant whenNotPaused {
+        require(contractOracles[contractId] == msg.sender, "인증된 Oracle만 검증할 수 있습니다");
+        require(!claimsProcessed[contractId], "이미 처리된 청구입니다");
+        require(!oracleVerifications[contractId][msg.sender], "이미 검증한 Oracle입니다");
+        require(block.timestamp <= claimTimestamps[contractId] + VERIFICATION_TIMEOUT, "검증 기간이 만료되었습니다");
+        
+        // Oracle 검증 기록
+        oracleVerifications[contractId][msg.sender] = true;
+        claimVerificationCounts[contractId]++;
+        
+        // 최소 검증 수를 충족한 경우 청구 처리
+        if (claimVerificationCounts[contractId] >= MIN_VERIFICATION_COUNT) {
+            _processClaim(contractId, approved);
+        }
+    }
+    
+    /**
+     * @dev 내부 청구 처리 함수
+     * @param contractId 계약 ID
+     * @param approved 승인 여부
+     */
+    function _processClaim(uint256 contractId, bool approved) internal {
+        require(claimVerificationCounts[contractId] >= MIN_VERIFICATION_COUNT, "충분한 검증이 이루어지지 않았습니다");
+        
+        claimsApproved[contractId] = approved;
+        claimsProcessed[contractId] = true;
+        
+        emit ClaimProcessed(contractId, approved, claimAmounts[contractId]);
+        
+        if (approved) {
+            _processPayment(contractId);
+        }
     }
     
     /**
@@ -453,34 +508,6 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     function setContractOracle(uint256 contractId, address oracleAddress) external onlyOwner {
         require(contracts[contractId].exists, "Contract does not exist");
         contractOracles[contractId] = oracleAddress;
-    }
-    
-    /**
-     * @dev 체인링크 오라클을 사용하여 청구 처리
-     * @param contractId 계약 ID
-     * @param requestId 체인링크 요청 ID
-     */
-    function processClaim(uint256 contractId, bytes32 requestId) external nonReentrant whenNotPaused {
-        require(contracts[contractId].exists, "Contract does not exist");
-        require(contractOracles[contractId] != address(0), "Oracle not set");
-        require(!claimsProcessed[contractId], "Claim already processed");
-        
-        // In a real implementation, this would verify the Chainlink response
-        // For this example, we'll simulate the oracle response
-        
-        // Simulate oracle response (in a real implementation, this would be handled by Chainlink)
-        bool approved = true; // This would come from the oracle
-        uint256 amount = claimAmounts[contractId];
-        
-        claimsApproved[contractId] = approved;
-        claimsProcessed[contractId] = true;
-        
-        emit ClaimProcessed(contractId, approved, amount);
-        
-        // If approved, process payment
-        if (approved) {
-            _processPayment(contractId);
-        }
     }
     
     /**
