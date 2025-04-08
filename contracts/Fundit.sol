@@ -78,6 +78,11 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     mapping(uint256 => uint256) public claimTimestamps;
     mapping(uint256 => uint256) public claimVerificationCounts;
     mapping(uint256 => mapping(address => bool)) public oracleVerifications;
+    mapping(uint256 => string) public claimDescriptions;
+    mapping(uint256 => string[]) public claimEvidences;
+    mapping(uint256 => mapping(address => string)) public oracleEvidences;
+    mapping(uint256 => uint256) public claimRejectionCounts;
+    mapping(uint256 => bool) public claimAutoRejected;
     
     // 리뷰 관련 변수
     struct Review {
@@ -119,6 +124,8 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     uint256 public constant MIN_VERIFICATION_COUNT = 3;
     uint256 public constant VERIFICATION_TIMEOUT = 1 days;
     uint256 public constant MAX_CLAIM_AMOUNT = 1000 ether;
+    uint256 public constant MAX_REJECTION_COUNT = 2;
+    uint256 public constant EVIDENCE_REQUIRED_LENGTH = 100;
     
     // 생성자
     constructor() Ownable() {}
@@ -391,67 +398,34 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     /**
      * @dev 보험금 청구
      * @param contractId 계약 ID
-     * @param evidence 증거
-     */
-    function claimInsurance(
-        uint256 contractId,
-        string memory evidence
-    ) public whenNotPaused nonReentrant {
-        Contract storage contract_ = contracts[contractId];
-        
-        require(contract_.id > 0, "Contract does not exist");
-        require(contract_.proposer == msg.sender, "Not contract owner");
-        require(contract_.active, "Contract is not active");
-        require(!contract_.claimed, "Insurance already claimed");
-        require(block.timestamp >= contract_.startDate && block.timestamp <= contract_.endDate, "Contract is not in effect");
-        require(bytes(evidence).length > 0, "Evidence cannot be empty");
-        
-        // 실제 구현에서는 오라클을 통해 증거 검증 후 보험금 지급
-        // 여기서는 간단히 청구 이벤트만 발생
-        emit InsuranceClaimed(contractId, contract_.coverage);
-    }
-    
-    /**
-     * @dev 보험금 지급 (오라클만 호출 가능)
-     * @param contractId 계약 ID
-     * @param amount 지급 금액
-     */
-    function payInsurance(
-        uint256 contractId,
-        uint256 amount
-    ) public whenNotPaused nonReentrant {
-        Contract storage contract_ = contracts[contractId];
-        
-        require(contract_.id > 0, "Contract does not exist");
-        require(contract_.active, "Contract is not active");
-        require(!contract_.claimed, "Insurance already claimed");
-        require(amount > 0 && amount <= contract_.coverage, "Invalid amount");
-        
-        // 실제 구현에서는 오라클 검증 로직 추가
-        // require(isOracle(msg.sender), "Only oracle can pay insurance");
-        
-        contract_.claimed = true;
-        
-        emit InsurancePaid(contractId, amount);
-    }
-    
-    /**
-     * @dev 보험금 청구 제출
-     * @param contractId 계약 ID
      * @param description 청구 설명
      * @param amount 청구 금액
+     * @param evidence 초기 증거
      */
-    function submitClaim(uint256 contractId, string memory description, uint256 amount) external nonReentrant whenNotPaused {
+    function submitClaim(
+        uint256 contractId, 
+        string memory description, 
+        uint256 amount,
+        string memory evidence
+    ) external nonReentrant whenNotPaused {
         require(contracts[contractId].exists, "계약이 존재하지 않습니다");
         require(contracts[contractId].proposer == msg.sender, "계약 소유자가 아닙니다");
         require(!claimsProcessed[contractId], "이미 처리된 청구입니다");
         require(amount <= contracts[contractId].coverage, "청구 금액이 보장 금액을 초과합니다");
         require(amount <= MAX_CLAIM_AMOUNT, "청구 금액이 최대 한도를 초과합니다");
+        require(bytes(description).length >= EVIDENCE_REQUIRED_LENGTH, "청구 설명이 너무 짧습니다");
+        require(bytes(evidence).length >= EVIDENCE_REQUIRED_LENGTH, "증거가 너무 짧습니다");
         
         // 청구 정보 저장
         claimAmounts[contractId] = amount;
+        claimDescriptions[contractId] = description;
         claimTimestamps[contractId] = block.timestamp;
         claimVerificationCounts[contractId] = 0;
+        claimRejectionCounts[contractId] = 0;
+        claimAutoRejected[contractId] = false;
+        
+        // 초기 증거 저장
+        claimEvidences[contractId].push(evidence);
         
         emit ClaimSubmitted(contractId, description, amount);
     }
@@ -471,10 +445,24 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         require(!claimsProcessed[contractId], "이미 처리된 청구입니다");
         require(!oracleVerifications[contractId][msg.sender], "이미 검증한 Oracle입니다");
         require(block.timestamp <= claimTimestamps[contractId] + VERIFICATION_TIMEOUT, "검증 기간이 만료되었습니다");
+        require(bytes(evidence).length >= EVIDENCE_REQUIRED_LENGTH, "증거가 너무 짧습니다");
         
         // Oracle 검증 기록
         oracleVerifications[contractId][msg.sender] = true;
+        oracleEvidences[contractId][msg.sender] = evidence;
         claimVerificationCounts[contractId]++;
+        
+        // 거부 횟수 업데이트
+        if (!approved) {
+            claimRejectionCounts[contractId]++;
+            
+            // 최대 거부 횟수 초과 시 자동 거부
+            if (claimRejectionCounts[contractId] >= MAX_REJECTION_COUNT) {
+                claimAutoRejected[contractId] = true;
+                _processClaim(contractId, false);
+                return;
+            }
+        }
         
         // 최소 검증 수를 충족한 경우 청구 처리
         if (claimVerificationCounts[contractId] >= MIN_VERIFICATION_COUNT) {
@@ -489,6 +477,7 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
      */
     function _processClaim(uint256 contractId, bool approved) internal {
         require(claimVerificationCounts[contractId] >= MIN_VERIFICATION_COUNT, "충분한 검증이 이루어지지 않았습니다");
+        require(!claimsProcessed[contractId], "이미 처리된 청구입니다");
         
         claimsApproved[contractId] = approved;
         claimsProcessed[contractId] = true;
@@ -620,5 +609,47 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     function getReview(uint256 contractId) external view returns (Review memory) {
         require(hasReview[contractId], "Review does not exist");
         return reviews[contractId];
+    }
+    
+    /**
+     * @dev 청구 증거 추가
+     * @param contractId 계약 ID
+     * @param evidence 추가 증거
+     */
+    function addClaimEvidence(uint256 contractId, string memory evidence) external nonReentrant whenNotPaused {
+        require(contracts[contractId].exists, "계약이 존재하지 않습니다");
+        require(contracts[contractId].proposer == msg.sender, "계약 소유자가 아닙니다");
+        require(!claimsProcessed[contractId], "이미 처리된 청구입니다");
+        require(bytes(evidence).length >= EVIDENCE_REQUIRED_LENGTH, "증거가 너무 짧습니다");
+        
+        claimEvidences[contractId].push(evidence);
+    }
+    
+    /**
+     * @dev 청구 정보 조회
+     * @param contractId 계약 ID
+     */
+    function getClaimInfo(uint256 contractId) external view returns (
+        uint256 amount,
+        string memory description,
+        uint256 timestamp,
+        uint256 verificationCount,
+        uint256 rejectionCount,
+        bool processed,
+        bool approved,
+        bool autoRejected,
+        string[] memory evidences
+    ) {
+        return (
+            claimAmounts[contractId],
+            claimDescriptions[contractId],
+            claimTimestamps[contractId],
+            claimVerificationCounts[contractId],
+            claimRejectionCounts[contractId],
+            claimsProcessed[contractId],
+            claimsApproved[contractId],
+            claimAutoRejected[contractId],
+            claimEvidences[contractId]
+        );
     }
 }
