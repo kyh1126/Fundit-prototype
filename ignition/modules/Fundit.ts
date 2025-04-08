@@ -1,13 +1,13 @@
 import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
 
 export default buildModule("FunditModule", (m) => {
-  // Deploy FunditToken contract
+  // FunditToken 컨트랙트 배포
   const funditToken = m.contract("FunditToken", []);
   
-  // Deploy Fundit contract
+  // Fundit 컨트랙트 배포
   const funditContract = m.contract("Fundit", []);
   
-  // Set FunditToken in Fundit contract
+  // Fundit 컨트랙트에 FunditToken 설정
   m.call(funditContract, "setFunditToken", [funditToken]);
 
   return { funditContract, funditToken };

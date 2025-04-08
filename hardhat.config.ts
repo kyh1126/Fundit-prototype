@@ -5,6 +5,7 @@ import "@typechain/hardhat";
 import "dotenv/config";
 
 const config: HardhatUserConfig = {
+  // Solidity 컴파일러 설정
   solidity: {
     version: "0.8.28",
     settings: {
@@ -15,6 +16,7 @@ const config: HardhatUserConfig = {
     }
   },
 
+  // 네트워크 설정
   networks: {
     baseSepoliaTestnet: {
       url: "https://sepolia.base.org",
@@ -23,6 +25,7 @@ const config: HardhatUserConfig = {
     },
   },
 
+  // TypeChain 설정
   typechain: {
     outDir: "typechain-types",
     target: "ethers-v6",

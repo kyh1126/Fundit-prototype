@@ -4,13 +4,16 @@ import './globals.css'
 import { Providers } from './providers'
 import Navbar from '@/components/layout/Navbar'
 
+// Inter 폰트 설정
 const inter = Inter({ subsets: ['latin'] })
 
+// 메타데이터 설정
 export const metadata = {
   title: 'Fundit - Web3 보험 크라우드펀딩 플랫폼',
   description: '사용자가 직접 보험 상품을 제안하고 보험사가 입찰할 수 있는 혁신적인 플랫폼',
 }
 
+// 루트 레이아웃 컴포넌트
 export default function RootLayout({
   children,
 }: {

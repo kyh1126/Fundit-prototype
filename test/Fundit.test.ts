@@ -31,13 +31,13 @@ async function deployFixture(): Promise<TestFixture> {
   const walletClients = await hre.viem.getWalletClients();
   const [owner, addr1, addr2, addr3] = walletClients.map(client => client.account.address);
   
-  // Deploy FunditToken
+  // FunditToken 배포
   const funditToken = await hre.viem.deployContract("FunditToken");
   
-  // Deploy Fundit
+  // Fundit 배포
   const fundit = await hre.viem.deployContract("Fundit");
   
-  // Set FunditToken in Fundit
+  // Fundit에 FunditToken 설정
   await fundit.write.setFunditToken([funditToken.address]);
 
   return {
@@ -52,11 +52,11 @@ async function deployFixture(): Promise<TestFixture> {
     description: "Test Description",
     premium: BigInt(1000),
     coverage: BigInt(10000),
-    duration: BigInt(7 * 24 * 60 * 60), // 7 days
+    duration: BigInt(7 * 24 * 60 * 60), // 7일
     bidPremium: BigInt(900),
     bidCoverage: BigInt(9000),
     terms: "Test Terms",
-    contractDuration: BigInt(30 * 24 * 60 * 60), // 30 days
+    contractDuration: BigInt(30 * 24 * 60 * 60), // 30일
   };
 }
 
