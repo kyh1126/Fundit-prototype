@@ -685,4 +685,12 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     function getProposalCount() public view returns (uint256) {
         return _proposalIds.current();
     }
+
+    /**
+     * @dev 전체 계약 수를 반환합니다.
+     * @return 전체 계약 수
+     */
+    function getContractCount() public view returns (uint256) {
+        return _contractIds.current();
+    }
 }
