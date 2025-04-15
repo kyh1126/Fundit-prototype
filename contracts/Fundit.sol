@@ -499,7 +499,7 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
      * @param oracleAddress 체인링크 오라클 주소
      */
     function setContractOracle(uint256 contractId, address oracleAddress) external onlyOwner {
-        require(contracts[contractId].exists, "Contract does not exist");
+        require(contracts[contractId].exists, unicode"계약이 존재하지 않습니다");
         contractOracles[contractId] = oracleAddress;
     }
     
@@ -508,15 +508,15 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
      * @param contractId 계약 ID
      */
     function _processPayment(uint256 contractId) internal {
-        require(contracts[contractId].exists, "Contract does not exist");
-        require(claimsProcessed[contractId], "Claim not processed");
-        require(claimsApproved[contractId], "Claim not approved");
+        require(contracts[contractId].exists, unicode"계약이 존재하지 않습니다");
+        require(claimsProcessed[contractId], unicode"청구가 처리되지 않았습니다");
+        require(claimsApproved[contractId], unicode"청구가 승인되지 않았습니다");
         
         uint256 amount = claimAmounts[contractId];
         address recipient = contracts[contractId].proposer;
         
-        // Transfer payment (in a real implementation, this would use a token or ETH)
-        // For this example, we'll just emit an event
+        // 지급 처리 (실제 구현에서는 토큰이나 ETH를 사용)
+        // 이 예제에서는 이벤트만 발생시킴
         emit PaymentProcessed(contractId, recipient, amount);
     }
     
@@ -525,6 +525,7 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
      * @dev 컨트랙트 일시 정지
      */
     function pause() public onlyOwner {
+        require(!paused(), unicode"계약이 이미 일시중지 상태입니다");
         _pause();
     }
     
@@ -532,6 +533,7 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
      * @dev 컨트랙트 정지 해제
      */
     function unpause() public onlyOwner {
+        require(paused(), unicode"계약이 이미 활성화 상태입니다");
         _unpause();
     }
     
@@ -541,7 +543,9 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
      * @param status 등록 상태
      */
     function setInsuranceCompanyStatus(address company, bool status) public onlyOwner {
+        require(company != address(0), unicode"유효하지 않은 주소입니다");
         insuranceCompanies[company] = status;
+        emit InsuranceCompanyStatusChanged(company, status);
     }
     
     /**
@@ -692,5 +696,49 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
      */
     function getContractCount() public view returns (uint256) {
         return _contractIds.current();
+    }
+
+    /**
+     * @dev Oracle 등록 상태를 설정합니다
+     * @param oracle Oracle 주소
+     * @param status 등록 상태
+     */
+    function setOracleStatus(address oracle, bool status) external onlyOwner {
+        require(oracle != address(0), unicode"유효하지 않은 Oracle 주소입니다");
+        registeredOracles[oracle] = status;
+        emit OracleStatusChanged(oracle, status);
+    }
+
+    /**
+     * @dev 보험금 청구를 제출합니다
+     * @param contractId 계약 ID
+     * @param amount 청구 금액
+     */
+    function submitClaim(uint256 contractId, uint256 amount) external whenNotPaused {
+        require(contracts[contractId].exists, unicode"계약이 존재하지 않습니다");
+        require(contracts[contractId].proposer == msg.sender, unicode"계약 제안자만 청구를 제출할 수 있습니다");
+        require(contracts[contractId].status == ContractStatus.Active, unicode"계약이 활성 상태가 아닙니다");
+        require(amount > 0 && amount <= contracts[contractId].coverage, unicode"청구 금액이 유효하지 않습니다");
+
+        contracts[contractId].status = ContractStatus.UnderReview;
+        claimAmounts[contractId] = amount;
+
+        emit ClaimSubmitted(contractId, msg.sender, amount);
+    }
+
+    /**
+     * @dev Oracle이 검증 결과를 제출합니다
+     * @param contractId 계약 ID
+     * @param isValid 검증 결과
+     */
+    function submitOracleVerification(uint256 contractId, bool isValid) external whenNotPaused {
+        require(contracts[contractId].exists, unicode"계약이 존재하지 않습니다");
+        require(registeredOracles[msg.sender], unicode"등록된 Oracle만 검증을 제출할 수 있습니다");
+        require(contracts[contractId].status == ContractStatus.UnderReview, unicode"계약이 검토 중 상태가 아닙니다");
+        require(!oracleVerifications[contractId][msg.sender], unicode"이미 검증을 제출했습니다");
+
+        oracleVerifications[contractId][msg.sender] = true;
+
+        emit OracleVerificationSubmitted(contractId, msg.sender, isValid);
     }
 }
