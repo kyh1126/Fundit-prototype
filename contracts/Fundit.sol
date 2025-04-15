@@ -54,9 +54,9 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         string terms;            // 보장 조건
         uint256 startDate;       // 시작일
         uint256 endDate;         // 종료일
-        bool active;             // 활성화 여부
+        ContractStatus status;   // 계약 상태
         bool claimed;            // 청구 여부
-        bool exists;     // 계약 존재 여부
+        bool exists;             // 계약 존재 여부
     }
     
     // 매핑
@@ -102,18 +102,17 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     FunditToken public funditToken;
     
     // 이벤트
-    event ProposalCreated(uint256 indexed proposalId, address indexed proposer, string title, uint256 premium, uint256 coverage);
-    event BidPlaced(uint256 indexed bidId, uint256 indexed proposalId, address indexed insuranceCompany, uint256 premium, uint256 coverage);
-    event ContractCreated(uint256 indexed contractId, uint256 indexed proposalId, uint256 indexed bidId, address proposer, address insuranceCompany);
-    event InsuranceClaimed(uint256 indexed contractId, uint256 amount);
-    event InsurancePaid(uint256 indexed contractId, uint256 amount);
-    event ClaimSubmitted(uint256 indexed contractId, string description, uint256 amount);
-    event ClaimProcessed(uint256 indexed contractId, bool approved, uint256 amount);
-    event PaymentProcessed(uint256 indexed contractId, address indexed recipient, uint256 amount);
-    event ReviewSubmitted(uint256 indexed contractId, address indexed reviewer, string content, uint256 rating);
-    event ReviewRewarded(uint256 indexed contractId, address indexed reviewer, uint256 amount);
+    event ProposalCreated(uint256 indexed proposalId, address indexed proposer);
+    event BidSubmitted(uint256 indexed proposalId, address indexed bidder, uint256 premium);
+    event ContractCreated(uint256 indexed contractId, uint256 indexed proposalId);
+    event ClaimSubmitted(uint256 indexed contractId, address indexed claimer, uint256 amount);
     event OracleRegistered(address indexed oracle);
     event OracleUnregistered(address indexed oracle);
+    event OracleStatusChanged(address indexed oracle, bool status);
+    event InsuranceCompanyStatusChanged(address indexed company, bool status);
+    event OracleVerificationSubmitted(uint256 indexed contractId, address indexed oracle, bool isValid);
+    event ReviewSubmitted(uint256 indexed contractId, address indexed reviewer, string content, uint256 rating);
+    event ReviewRewarded(uint256 indexed contractId, address indexed reviewer, uint256 amount);
     
     // 상수
     uint256 public constant MIN_PROPOSAL_DURATION = 1 days;     // 최소 제안 기간
@@ -129,6 +128,14 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     uint256 public constant MAX_CLAIM_AMOUNT = 1000 ether;      // 최대 청구 금액
     uint256 public constant MAX_REJECTION_COUNT = 2;            // 최대 거부 횟수
     uint256 public constant EVIDENCE_REQUIRED_LENGTH = 100;     // 증거 최소 길이
+    
+    enum ContractStatus {
+        None,       // 초기 상태
+        Active,     // 활성화
+        UnderReview,// 검토 중
+        Completed,  // 완료됨
+        Cancelled   // 취소됨
+    }
     
     // 생성자
     constructor() Ownable() {}
@@ -173,7 +180,7 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         
         userProposals[msg.sender].push(newProposalId);
         
-        emit ProposalCreated(newProposalId, msg.sender, title, premium, coverage);
+        emit ProposalCreated(newProposalId, msg.sender);
         
         return newProposalId;
     }
@@ -268,7 +275,7 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         proposalBids[proposalId].push(bids[newBidId]);
         companyBids[msg.sender].push(newBidId);
         
-        emit BidPlaced(newBidId, proposalId, msg.sender, premium, coverage);
+        emit BidSubmitted(proposalId, msg.sender, premium);
         
         return newBidId;
     }
@@ -350,7 +357,7 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
             terms: bid.terms,
             startDate: block.timestamp,
             endDate: block.timestamp + duration,
-            active: true,
+            status: ContractStatus.Active,
             claimed: false,
             exists: true
         });
@@ -358,7 +365,7 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         userContracts[proposal.proposer].push(newContractId);
         companyContracts[bid.insuranceCompany].push(newContractId);
         
-        emit ContractCreated(newContractId, proposalId, bidId, proposal.proposer, bid.insuranceCompany);
+        emit ContractCreated(newContractId, proposalId);
         
         return newContractId;
     }
@@ -378,7 +385,7 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         string memory terms,
         uint256 startDate,
         uint256 endDate,
-        bool active,
+        ContractStatus status,
         bool claimed
     ) {
         Contract memory contract_ = contracts[contractId];
@@ -393,7 +400,7 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
             contract_.terms,
             contract_.startDate,
             contract_.endDate,
-            contract_.active,
+            contract_.status,
             contract_.claimed
         );
     }
@@ -431,7 +438,7 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         // 초기 증거 저장
         claimEvidences[contractId].push(evidence);
         
-        emit ClaimSubmitted(contractId, description, amount);
+        emit ClaimSubmitted(contractId, msg.sender, amount);
     }
     
     /**
@@ -486,7 +493,7 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         claimsApproved[contractId] = approved;
         claimsProcessed[contractId] = true;
         
-        emit ClaimProcessed(contractId, approved, claimAmounts[contractId]);
+        emit ClaimSubmitted(contractId, msg.sender, claimAmounts[contractId]);
         
         if (approved) {
             _processPayment(contractId);
@@ -517,7 +524,7 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         
         // 지급 처리 (실제 구현에서는 토큰이나 ETH를 사용)
         // 이 예제에서는 이벤트만 발생시킴
-        emit PaymentProcessed(contractId, recipient, amount);
+        emit ClaimSubmitted(contractId, recipient, amount);
     }
     
     // 관리자 함수
