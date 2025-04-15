@@ -5,14 +5,15 @@ import { PublicClient } from 'viem';
 import { FUNDIT_ABI } from '@/contracts/abi';
 
 interface Proposal {
+  id: bigint;
+  proposer: `0x${string}`;
   title: string;
   description: string;
   premium: bigint;
   coverage: bigint;
   duration: bigint;
-  proposer: `0x${string}`;
   isActive: boolean;
-  createdAt: bigint;
+  hasContract: boolean;
 }
 
 interface Contract {
@@ -61,7 +62,7 @@ export const useStore = create<StoreState>((set) => ({
         address: contractAddress as `0x${string}`,
         abi: FUNDIT_ABI,
         functionName: 'getProposalCount',
-      });
+      }) as bigint;
 
       // 각 제안 정보 가져오기
       const proposalPromises = Array.from({ length: Number(count) }, (_, i) =>
@@ -73,8 +74,22 @@ export const useStore = create<StoreState>((set) => ({
         })
       );
 
-      const proposalData = await Promise.all(proposalPromises);
-      set({ proposals: proposalData });
+      const proposalResults = await Promise.all(proposalPromises);
+      
+      // 결과를 Proposal 인터페이스에 맞게 변환
+      const proposals = proposalResults.map((result: any) => ({
+        id: result[0],
+        proposer: result[1],
+        title: result[2],
+        description: result[3],
+        premium: result[4],
+        coverage: result[5],
+        duration: result[6],
+        isActive: result[7],
+        hasContract: result[8]
+      }));
+
+      set({ proposals });
     } catch (error) {
       console.error('제안 목록 로드 중 오류:', error);
       set({ error: '제안 목록을 불러오는 중 오류가 발생했습니다' });

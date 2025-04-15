@@ -165,7 +165,7 @@ describe("Fundit", function () {
       const contractReceipt = await publicClient.waitForTransactionReceipt({ hash: contractTxHash });
       const contractId = BigInt(contractReceipt.logs[0].topics[1] as `0x${string}`);
       
-      const contract = await fundit.read.getContract([contractId]) as [bigint, bigint, bigint, Address, Address, bigint, bigint, string, bigint, bigint, boolean, boolean];
+      const contract = await fundit.read.getContract([contractId]) as [bigint, bigint, bigint, Address, Address, bigint, bigint, string, bigint, bigint, number, boolean];
       expect(contract[0]).to.equal(contractId);
       expect(contract[1]).to.equal(proposalId);
       expect(contract[2]).to.equal(bidId);
@@ -175,7 +175,7 @@ describe("Fundit", function () {
       expect(contract[6]).to.equal(bidCov);
       expect(contract[7]).to.equal(terms);
       expect(contract[9]).to.equal(contract[8] + contractDuration);
-      expect(contract[10]).to.be.true;
+      expect(contract[10]).to.equal(1); // ContractStatus.Active
       expect(contract[11]).to.be.false;
     });
 
