@@ -27,7 +27,7 @@ interface Contract {
   terms: string;
   startDate: bigint;
   endDate: bigint;
-  active: boolean;
+  status: number;
   claimed: boolean;
 }
 
@@ -41,6 +41,28 @@ interface StoreState {
   fetchContracts: (publicClient: PublicClient) => Promise<void>;
 }
 
+// 컨트랙트 함수 타입
+type ContractFunction = 'getProposalCount' | 'getProposal' | 'getContractCount' | 'getContract';
+
+// 컨트랙트 읽기 함수
+const readContract = async (
+  publicClient: PublicClient,
+  functionName: ContractFunction,
+  args: readonly [] | readonly [bigint] = []
+) => {
+  const contractAddress = process.env.NEXT_PUBLIC_FUNDIT_CONTRACT_ADDRESS;
+  if (!contractAddress) {
+    throw new Error('컨트랙트 주소가 설정되지 않았습니다');
+  }
+
+  return publicClient.readContract({
+    address: contractAddress as `0x${string}`,
+    abi: FUNDIT_ABI,
+    functionName,
+    args,
+  });
+};
+
 export const useStore = create<StoreState>((set) => ({
   contractAddress: process.env.NEXT_PUBLIC_FUNDIT_CONTRACT_ADDRESS || null,
   proposals: null,
@@ -48,35 +70,17 @@ export const useStore = create<StoreState>((set) => ({
   loading: false,
   error: null,
   fetchProposals: async (publicClient: PublicClient) => {
-    const contractAddress = process.env.NEXT_PUBLIC_FUNDIT_CONTRACT_ADDRESS;
-    if (!contractAddress) {
-      set({ error: '컨트랙트 주소가 설정되지 않았습니다' });
-      return;
-    }
-
     set({ loading: true, error: null });
 
     try {
-      // 제안 수 가져오기
-      const count = await publicClient.readContract({
-        address: contractAddress as `0x${string}`,
-        abi: FUNDIT_ABI,
-        functionName: 'getProposalCount',
-      }) as bigint;
-
-      // 각 제안 정보 가져오기
+      const count = (await readContract(publicClient, 'getProposalCount')) as bigint;
+      
       const proposalPromises = Array.from({ length: Number(count) }, (_, i) =>
-        publicClient.readContract({
-          address: contractAddress as `0x${string}`,
-          abi: FUNDIT_ABI,
-          functionName: 'getProposal',
-          args: [BigInt(i + 1)],
-        })
+        readContract(publicClient, 'getProposal', [BigInt(i + 1)])
       );
 
       const proposalResults = await Promise.all(proposalPromises);
       
-      // 결과를 Proposal 인터페이스에 맞게 변환
       const proposals = proposalResults.map((result: any) => ({
         id: result[0],
         proposer: result[1],
@@ -98,34 +102,33 @@ export const useStore = create<StoreState>((set) => ({
     }
   },
   fetchContracts: async (publicClient: PublicClient) => {
-    const contractAddress = process.env.NEXT_PUBLIC_FUNDIT_CONTRACT_ADDRESS;
-    if (!contractAddress) {
-      set({ error: '컨트랙트 주소가 설정되지 않았습니다' });
-      return;
-    }
-
     set({ loading: true, error: null });
 
     try {
-      // 계약 수 가져오기
-      const count = await publicClient.readContract({
-        address: contractAddress as `0x${string}`,
-        abi: FUNDIT_ABI,
-        functionName: 'getContractCount',
-      });
+      const count = (await readContract(publicClient, 'getContractCount')) as bigint;
 
-      // 각 계약 정보 가져오기
       const contractPromises = Array.from({ length: Number(count) }, (_, i) =>
-        publicClient.readContract({
-          address: contractAddress as `0x${string}`,
-          abi: FUNDIT_ABI,
-          functionName: 'getContract',
-          args: [BigInt(i + 1)],
-        })
+        readContract(publicClient, 'getContract', [BigInt(i + 1)])
       );
 
-      const contractData = await Promise.all(contractPromises);
-      set({ contracts: contractData });
+      const contractResults = await Promise.all(contractPromises);
+      
+      const contracts = contractResults.map((result: any) => ({
+        id: result[0],
+        proposalId: result[1],
+        bidId: result[2],
+        proposer: result[3],
+        insuranceCompany: result[4],
+        premium: result[5],
+        coverage: result[6],
+        terms: result[7],
+        startDate: result[8],
+        endDate: result[9],
+        status: result[10],
+        claimed: result[11]
+      }));
+
+      set({ contracts });
     } catch (error) {
       console.error('계약 목록 로드 중 오류:', error);
       set({ error: '계약 목록을 불러오는 중 오류가 발생했습니다' });
