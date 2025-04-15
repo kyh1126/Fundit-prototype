@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { ConnectButton } from '@rainbow-me/rainbowkit'
 
 export default function Home() {
   return (
@@ -29,10 +28,6 @@ export default function Home() {
             <h2 className="text-2xl font-semibold mb-2">보험금 청구</h2>
             <p className="text-gray-600 dark:text-gray-400">보험금 청구를 신청하고 진행 상황을 확인하세요.</p>
           </Link>
-        </div>
-
-        <div className="mt-12 text-center">
-          <ConnectButton />
         </div>
       </div>
     </main>

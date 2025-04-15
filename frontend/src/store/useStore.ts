@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import { PublicClient } from 'viem';
+import { PublicClient, WalletClient } from 'viem';
 import { FUNDIT_ABI } from '@/contracts/abi';
 
 interface Proposal {
@@ -32,6 +32,12 @@ interface Contract {
 }
 
 interface StoreState {
+  publicClient: PublicClient | null;
+  walletClient: WalletClient | null;
+  address: `0x${string}` | null;
+  setPublicClient: (client: PublicClient | null) => void;
+  setWalletClient: (client: WalletClient | null) => void;
+  setAddress: (address: `0x${string}` | null) => void;
   contractAddress: string | null;
   proposals: Proposal[] | null;
   contracts: Contract[] | null;
@@ -64,6 +70,12 @@ const readContract = async (
 };
 
 export const useStore = create<StoreState>((set) => ({
+  publicClient: null,
+  walletClient: null,
+  address: null,
+  setPublicClient: (client) => set({ publicClient: client }),
+  setWalletClient: (client) => set({ walletClient: client }),
+  setAddress: (address) => set({ address }),
   contractAddress: process.env.NEXT_PUBLIC_FUNDIT_CONTRACT_ADDRESS || null,
   proposals: null,
   contracts: null,
