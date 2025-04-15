@@ -37,8 +37,8 @@ contract FunditToken is ERC20, Ownable, Pausable {
     ) public pure returns (uint256) {
         // 내용 길이 점수 계산
         uint256 contentLength = bytes(content).length;
-        require(contentLength >= MIN_REVIEW_LENGTH, "리뷰가 너무 짧습니다");
-        require(contentLength <= MAX_REVIEW_LENGTH, "리뷰가 너무 깁니다");
+        require(contentLength >= MIN_REVIEW_LENGTH, unicode"리뷰가 너무 짧습니다");
+        require(contentLength <= MAX_REVIEW_LENGTH, unicode"리뷰가 너무 깁니다");
         
         uint256 lengthScore;
         if (contentLength >= 1000) {
@@ -54,7 +54,7 @@ contract FunditToken is ERC20, Ownable, Pausable {
         }
         
         // 평점 검증
-        require(rating >= MIN_RATING && rating <= MAX_RATING, "유효하지 않은 평점입니다");
+        require(rating >= MIN_RATING && rating <= MAX_RATING, unicode"유효하지 않은 평점입니다");
         
         // 기본 점수 계산 (길이 점수 * 평점)
         uint256 baseScore = (lengthScore * rating) / MAX_RATING;
@@ -67,7 +67,7 @@ contract FunditToken is ERC20, Ownable, Pausable {
         
         // 최종 점수 계산
         uint256 finalScore = baseScore + continuousBonus;
-        require(finalScore <= 10, "최대 점수를 초과했습니다");
+        require(finalScore <= 10, unicode"최대 점수를 초과했습니다");
         
         return finalScore;
     }
@@ -78,7 +78,7 @@ contract FunditToken is ERC20, Ownable, Pausable {
     // 토큰 발행 이벤트
     event TokensMinted(address indexed to, uint256 amount, string reason);
 
-    constructor() ERC20("Fundit Token", "FUND") Ownable(msg.sender) {}
+    constructor() ERC20("Fundit Token", "FUND") Ownable() {}
 
     /**
      * @dev 토큰 발행
@@ -87,7 +87,7 @@ contract FunditToken is ERC20, Ownable, Pausable {
      */
     function mint(address to, uint256 amount) public onlyOwner whenNotPaused {
         _mint(to, amount);
-        emit TokensMinted(to, amount, "관리자 발행");
+        emit TokensMinted(to, amount, unicode"관리자 발행");
     }
 
     /**
@@ -100,13 +100,13 @@ contract FunditToken is ERC20, Ownable, Pausable {
         address user,
         string memory content,
         uint256 rating
-    ) public onlyOwner whenNotPaused {
+    ) public whenNotPaused {
         // 리뷰 품질 점수 계산
         uint256 qualityScore = calculateReviewScore(content, rating, userReviewCounts[user]);
         
         // 보상 계산
         uint256 baseReward = BASE_REVIEW_REWARD + ((qualityScore - 1) * REWARD_PER_POINT);
-        require(baseReward <= MAX_REVIEW_REWARD, "보상이 최대 한도를 초과합니다");
+        require(baseReward <= MAX_REVIEW_REWARD, unicode"보상이 최대 한도를 초과합니다");
         
         // 사용자 정보 업데이트
         userReviewScores[user] = qualityScore;
@@ -125,7 +125,7 @@ contract FunditToken is ERC20, Ownable, Pausable {
      * @param infoScore 정보 점수 (1-10)
      */
     function rewardAdditionalInfo(address user, uint256 infoScore) public onlyOwner whenNotPaused {
-        require(infoScore >= 3 && infoScore <= 10, "정보 점수는 3에서 10 사이여야 합니다");
+        require(infoScore >= 3 && infoScore <= 10, unicode"정보 점수는 3에서 10 사이여야 합니다");
         
         // 정보 점수에 따른 보상 계산 (최대 20 토큰)
         uint256 infoReward = ((infoScore - 3 + 1) * 2 * 10**18);
@@ -136,7 +136,7 @@ contract FunditToken is ERC20, Ownable, Pausable {
         // 토큰 발행
         _mint(user, infoReward);
         
-        emit TokensMinted(user, infoReward, "추가 정보 보상");
+        emit TokensMinted(user, infoReward, unicode"추가 정보 보상");
     }
 
     /**

@@ -6,96 +6,101 @@ import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
-import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import "./FunditToken.sol";
 
 /**
  * @title Fundit
- * @dev 사용자가 보험 상품을 제안하고 보험사가 입찰하여 계약을 체결하는 플랫폼
+ * @dev 보험 상품 제안 및 계약 플랫폼
+ * - 사용자가 보험 상품을 제안하고 보험사가 입찰하여 계약을 체결
+ * - Oracle 시스템을 통한 보험금 청구 검증
+ * - 리뷰 및 토큰 보상 시스템
  */
 contract Fundit is Ownable, Pausable, ReentrancyGuard {
     using Counters for Counters.Counter;
     
     // 카운터
-    Counters.Counter private _proposalIds;
-    Counters.Counter private _bidIds;
-    Counters.Counter private _contractIds;
+    Counters.Counter private _proposalIds;    // 제안 ID 카운터
+    Counters.Counter private _bidIds;         // 입찰 ID 카운터
+    Counters.Counter private _contractIds;    // 계약 ID 카운터
     
     // 구조체 정의
     struct Proposal {
-        uint256 id;
-        address proposer;
-        string title;
-        string description;
-        uint256 premium;
-        uint256 coverage;
-        uint256 deadline;
-        bool active;
-        bool finalized;
+        uint256 id;           // 제안 ID
+        address proposer;     // 제안자 주소
+        string title;         // 제안 제목
+        string description;   // 제안 설명
+        uint256 premium;      // 보험료
+        uint256 coverage;     // 보장 금액
+        uint256 deadline;     // 마감 기한
+        bool active;          // 활성화 여부
+        bool finalized;       // 완료 여부
     }
     
     struct Bid {
-        uint256 id;
-        uint256 proposalId;
-        address insuranceCompany;
-        uint256 premium;
-        uint256 coverage;
-        string terms;
-        bool active;
+        uint256 id;              // 입찰 ID
+        uint256 proposalId;      // 제안 ID
+        address insuranceCompany; // 보험사 주소
+        uint256 premium;         // 제안 보험료
+        uint256 coverage;        // 제안 보장 금액
+        string terms;            // 보장 조건
+        bool active;             // 활성화 여부
     }
     
     struct Contract {
-        uint256 id;
-        uint256 proposalId;
-        uint256 bidId;
-        address proposer;
-        address insuranceCompany;
-        uint256 premium;
-        uint256 coverage;
-        string terms;
-        uint256 startDate;
-        uint256 endDate;
-        bool active;
-        bool claimed;
+        uint256 id;              // 계약 ID
+        uint256 proposalId;      // 제안 ID
+        uint256 bidId;           // 입찰 ID
+        address proposer;        // 제안자 주소
+        address insuranceCompany; // 보험사 주소
+        uint256 premium;         // 보험료
+        uint256 coverage;        // 보장 금액
+        string terms;            // 보장 조건
+        uint256 startDate;       // 시작일
+        uint256 endDate;         // 종료일
+        bool active;             // 활성화 여부
+        bool claimed;            // 청구 여부
+        bool exists;             // 존재 여부
     }
     
     // 매핑
-    mapping(uint256 => Proposal) public proposals;
-    mapping(uint256 => Bid) public bids;
-    mapping(uint256 => Contract) public contracts;
-    mapping(uint256 => Bid[]) public proposalBids;
-    mapping(address => bool) public insuranceCompanies;
-    mapping(address => uint256[]) public userProposals;
-    mapping(address => uint256[]) public companyBids;
-    mapping(address => uint256[]) public userContracts;
-    mapping(address => uint256[]) public companyContracts;
+    mapping(uint256 => Proposal) public proposals;                // 제안 정보
+    mapping(uint256 => Bid) public bids;                         // 입찰 정보
+    mapping(uint256 => Contract) public contracts;               // 계약 정보
+    mapping(uint256 => Bid[]) public proposalBids;               // 제안별 입찰 목록
+    mapping(address => bool) public insuranceCompanies;          // 등록된 보험사
+    mapping(address => uint256[]) public userProposals;          // 사용자별 제안 목록
+    mapping(address => uint256[]) public companyBids;            // 보험사별 입찰 목록
+    mapping(address => uint256[]) public userContracts;          // 사용자별 계약 목록
+    mapping(address => uint256[]) public companyContracts;       // 보험사별 계약 목록
     
     // Oracle 관련 변수
-    mapping(uint256 => address) public contractOracles;
-    mapping(uint256 => bool) public claimsProcessed;
-    mapping(uint256 => uint256) public claimAmounts;
-    mapping(uint256 => bool) public claimsApproved;
-    mapping(uint256 => uint256) public claimTimestamps;
-    mapping(uint256 => uint256) public claimVerificationCounts;
-    mapping(uint256 => mapping(address => bool)) public oracleVerifications;
-    mapping(uint256 => string) public claimDescriptions;
-    mapping(uint256 => string[]) public claimEvidences;
-    mapping(uint256 => mapping(address => string)) public oracleEvidences;
-    mapping(uint256 => uint256) public claimRejectionCounts;
-    mapping(uint256 => bool) public claimAutoRejected;
+    mapping(uint256 => address) public contractOracles;          // 계약별 Oracle
+    mapping(address => bool) public registeredOracles;           // 등록된 Oracle
+    mapping(uint256 => bool) public claimsProcessed;            // 처리된 청구
+    mapping(uint256 => uint256) public claimAmounts;            // 청구 금액
+    mapping(uint256 => bool) public claimsApproved;             // 승인된 청구
+    mapping(uint256 => uint256) public claimTimestamps;         // 청구 시간
+    mapping(uint256 => uint256) public claimVerificationCounts; // 검증 횟수
+    mapping(uint256 => mapping(address => bool)) public oracleVerifications; // Oracle 검증 결과
+    mapping(uint256 => string) public claimDescriptions;        // 청구 설명
+    mapping(uint256 => string[]) public claimEvidences;         // 청구 증거
+    mapping(uint256 => mapping(address => string)) public oracleEvidences;   // Oracle 증거
+    mapping(uint256 => uint256) public claimRejectionCounts;    // 거부 횟수
+    mapping(uint256 => bool) public claimAutoRejected;          // 자동 거부 여부
     
     // 리뷰 관련 변수
     struct Review {
-        uint256 contractId;
-        address reviewer;
-        string content;
-        uint256 rating;
-        uint256 timestamp;
-        bool exists;
+        uint256 contractId;     // 계약 ID
+        address reviewer;       // 리뷰어 주소
+        string content;         // 리뷰 내용
+        uint256 rating;         // 평점
+        uint256 timestamp;      // 작성 시간
+        bool exists;            // 존재 여부
     }
     
-    mapping(uint256 => Review) public reviews;
-    mapping(uint256 => bool) public hasReview;
+    mapping(uint256 => Review) public reviews;                   // 리뷰 정보
+    mapping(uint256 => bool) public hasReview;                   // 리뷰 존재 여부
     
     // 토큰 컨트랙트
     FunditToken public funditToken;
@@ -113,19 +118,19 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     event ReviewRewarded(uint256 indexed contractId, address indexed reviewer, uint256 amount);
     
     // 상수
-    uint256 public constant MIN_PROPOSAL_DURATION = 1 days;
-    uint256 public constant MAX_PROPOSAL_DURATION = 30 days;
-    uint256 public constant MIN_BID_DURATION = 1 days;
-    uint256 public constant MAX_BID_DURATION = 7 days;
-    uint256 public constant MIN_CONTRACT_DURATION = 1 days;
-    uint256 public constant MAX_CONTRACT_DURATION = 365 days;
+    uint256 public constant MIN_PROPOSAL_DURATION = 1 days;     // 최소 제안 기간
+    uint256 public constant MAX_PROPOSAL_DURATION = 30 days;    // 최대 제안 기간
+    uint256 public constant MIN_BID_DURATION = 1 days;          // 최소 입찰 기간
+    uint256 public constant MAX_BID_DURATION = 7 days;          // 최대 입찰 기간
+    uint256 public constant MIN_CONTRACT_DURATION = 1 days;     // 최소 계약 기간
+    uint256 public constant MAX_CONTRACT_DURATION = 365 days;   // 최대 계약 기간
     
     // Oracle 검증 관련 상수
-    uint256 public constant MIN_VERIFICATION_COUNT = 3;
-    uint256 public constant VERIFICATION_TIMEOUT = 1 days;
-    uint256 public constant MAX_CLAIM_AMOUNT = 1000 ether;
-    uint256 public constant MAX_REJECTION_COUNT = 2;
-    uint256 public constant EVIDENCE_REQUIRED_LENGTH = 100;
+    uint256 public constant MIN_VERIFICATION_COUNT = 3;         // 최소 검증 횟수
+    uint256 public constant VERIFICATION_TIMEOUT = 1 days;      // 검증 타임아웃
+    uint256 public constant MAX_CLAIM_AMOUNT = 1000 ether;      // 최대 청구 금액
+    uint256 public constant MAX_REJECTION_COUNT = 2;            // 최대 거부 횟수
+    uint256 public constant EVIDENCE_REQUIRED_LENGTH = 100;     // 증거 최소 길이
     
     // 생성자
     constructor() Ownable() {}
@@ -137,7 +142,7 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
      * @param description 제안 설명
      * @param premium 보험료
      * @param coverage 보장 금액
-     * @param duration 제안 기간 (일)
+     * @param duration 제안 기간 (초)
      */
     function proposeInsurance(
         string memory title,
@@ -146,12 +151,12 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         uint256 coverage,
         uint256 duration
     ) public whenNotPaused nonReentrant returns (uint256) {
-        require(bytes(title).length > 0, "Title cannot be empty");
-        require(bytes(description).length > 0, "Description cannot be empty");
-        require(premium > 0, "Premium must be greater than 0");
-        require(coverage > 0, "Coverage must be greater than 0");
-        require(coverage >= premium, "Coverage must be greater than or equal to premium");
-        require(duration >= MIN_PROPOSAL_DURATION && duration <= MAX_PROPOSAL_DURATION, "Invalid duration");
+        require(bytes(title).length > 0, unicode"제목이 비어있습니다");
+        require(bytes(description).length > 0, unicode"설명이 비어있습니다");
+        require(premium > 0, unicode"보험료는 0보다 커야 합니다");
+        require(coverage > 0, unicode"보장 금액은 0보다 커야 합니다");
+        require(coverage >= premium, unicode"보장 금액은 보험료보다 크거나 같아야 합니다");
+        require(duration >= MIN_PROPOSAL_DURATION && duration <= MAX_PROPOSAL_DURATION, unicode"잘못된 기간입니다");
         
         _proposalIds.increment();
         uint256 newProposalId = _proposalIds.current();
@@ -348,7 +353,8 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
             startDate: block.timestamp,
             endDate: block.timestamp + duration,
             active: true,
-            claimed: false
+            claimed: false,
+            exists: true
         });
         
         userContracts[proposal.proposer].push(newContractId);
@@ -408,13 +414,13 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         uint256 amount,
         string memory evidence
     ) external nonReentrant whenNotPaused {
-        require(contracts[contractId].exists, "계약이 존재하지 않습니다");
-        require(contracts[contractId].proposer == msg.sender, "계약 소유자가 아닙니다");
-        require(!claimsProcessed[contractId], "이미 처리된 청구입니다");
-        require(amount <= contracts[contractId].coverage, "청구 금액이 보장 금액을 초과합니다");
-        require(amount <= MAX_CLAIM_AMOUNT, "청구 금액이 최대 한도를 초과합니다");
-        require(bytes(description).length >= EVIDENCE_REQUIRED_LENGTH, "청구 설명이 너무 짧습니다");
-        require(bytes(evidence).length >= EVIDENCE_REQUIRED_LENGTH, "증거가 너무 짧습니다");
+        require(contracts[contractId].exists, unicode"계약이 존재하지 않습니다");
+        require(contracts[contractId].proposer == msg.sender, unicode"계약 소유자가 아닙니다");
+        require(!claimsProcessed[contractId], unicode"이미 처리된 청구입니다");
+        require(amount <= contracts[contractId].coverage, unicode"청구 금액이 보장 금액을 초과합니다");
+        require(amount <= MAX_CLAIM_AMOUNT, unicode"청구 금액이 최대 한도를 초과합니다");
+        require(bytes(description).length >= EVIDENCE_REQUIRED_LENGTH, unicode"청구 설명이 너무 짧습니다");
+        require(bytes(evidence).length >= EVIDENCE_REQUIRED_LENGTH, unicode"증거가 너무 짧습니다");
         
         // 청구 정보 저장
         claimAmounts[contractId] = amount;
@@ -431,6 +437,22 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     }
     
     /**
+     * @dev Oracle 등록 (소유자만 가능)
+     * @param oracleAddress Oracle 주소
+     */
+    function registerOracle(address oracleAddress) external onlyOwner {
+        registeredOracles[oracleAddress] = true;
+    }
+    
+    /**
+     * @dev Oracle 등록 해제 (소유자만 가능)
+     * @param oracleAddress Oracle 주소
+     */
+    function unregisterOracle(address oracleAddress) external onlyOwner {
+        registeredOracles[oracleAddress] = false;
+    }
+    
+    /**
      * @dev Oracle 검증 결과 제출
      * @param contractId 계약 ID
      * @param approved 승인 여부
@@ -441,11 +463,12 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         bool approved,
         string memory evidence
     ) external nonReentrant whenNotPaused {
-        require(contractOracles[contractId] == msg.sender, "인증된 Oracle만 검증할 수 있습니다");
-        require(!claimsProcessed[contractId], "이미 처리된 청구입니다");
-        require(!oracleVerifications[contractId][msg.sender], "이미 검증한 Oracle입니다");
-        require(block.timestamp <= claimTimestamps[contractId] + VERIFICATION_TIMEOUT, "검증 기간이 만료되었습니다");
-        require(bytes(evidence).length >= EVIDENCE_REQUIRED_LENGTH, "증거가 너무 짧습니다");
+        require(registeredOracles[msg.sender], unicode"인증된 Oracle만 검증할 수 있습니다");
+        require(contractOracles[contractId] == msg.sender, unicode"계약에 할당된 Oracle만 검증할 수 있습니다");
+        require(!claimsProcessed[contractId], unicode"이미 처리된 청구입니다");
+        require(!oracleVerifications[contractId][msg.sender], unicode"이미 검증한 Oracle입니다");
+        require(block.timestamp <= claimTimestamps[contractId] + VERIFICATION_TIMEOUT, unicode"검증 기간이 만료되었습니다");
+        require(bytes(evidence).length >= EVIDENCE_REQUIRED_LENGTH, unicode"증거가 너무 짧습니다");
         
         // Oracle 검증 기록
         oracleVerifications[contractId][msg.sender] = true;
@@ -476,8 +499,8 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
      * @param approved 승인 여부
      */
     function _processClaim(uint256 contractId, bool approved) internal {
-        require(claimVerificationCounts[contractId] >= MIN_VERIFICATION_COUNT, "충분한 검증이 이루어지지 않았습니다");
-        require(!claimsProcessed[contractId], "이미 처리된 청구입니다");
+        require(claimVerificationCounts[contractId] >= MIN_VERIFICATION_COUNT, unicode"충분한 검증이 이루어지지 않았습니다");
+        require(!claimsProcessed[contractId], unicode"이미 처리된 청구입니다");
         
         claimsApproved[contractId] = approved;
         claimsProcessed[contractId] = true;
@@ -555,10 +578,10 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
      * @param rating 평점 (1-5)
      */
     function submitReview(uint256 contractId, string memory content, uint256 rating) external nonReentrant whenNotPaused {
-        require(contracts[contractId].exists, "Contract does not exist");
-        require(contracts[contractId].proposer == msg.sender, "Not contract owner");
-        require(!hasReview[contractId], "Review already submitted");
-        require(rating >= 1 && rating <= 5, "Rating must be between 1 and 5");
+        require(contracts[contractId].exists, unicode"계약이 존재하지 않습니다");
+        require(msg.sender == contracts[contractId].proposer, unicode"계약 소유자만 리뷰를 작성할 수 있습니다");
+        require(!hasReview[contractId], unicode"이미 리뷰가 작성되었습니다");
+        require(rating >= 1 && rating <= 5, unicode"평점은 1에서 5 사이여야 합니다");
         
         // Create review
         reviews[contractId] = Review({
@@ -595,10 +618,7 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         qualityScore = (qualityScore * rating) / 5;
         
         // Reward the user with tokens
-        if (address(funditToken) != address(0)) {
-            funditToken.rewardReview(msg.sender, qualityScore);
-            emit ReviewRewarded(contractId, msg.sender, qualityScore);
-        }
+        funditToken.rewardReview(msg.sender, content, rating);
     }
     
     /**
@@ -617,10 +637,10 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
      * @param evidence 추가 증거
      */
     function addClaimEvidence(uint256 contractId, string memory evidence) external nonReentrant whenNotPaused {
-        require(contracts[contractId].exists, "계약이 존재하지 않습니다");
-        require(contracts[contractId].proposer == msg.sender, "계약 소유자가 아닙니다");
-        require(!claimsProcessed[contractId], "이미 처리된 청구입니다");
-        require(bytes(evidence).length >= EVIDENCE_REQUIRED_LENGTH, "증거가 너무 짧습니다");
+        require(contracts[contractId].exists, unicode"계약이 존재하지 않습니다");
+        require(contracts[contractId].proposer == msg.sender, unicode"계약 소유자가 아닙니다");
+        require(!claimsProcessed[contractId], unicode"이미 처리된 청구입니다");
+        require(bytes(evidence).length >= EVIDENCE_REQUIRED_LENGTH, unicode"증거가 너무 짧습니다");
         
         claimEvidences[contractId].push(evidence);
     }
@@ -629,27 +649,7 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
      * @dev 청구 정보 조회
      * @param contractId 계약 ID
      */
-    function getClaimInfo(uint256 contractId) external view returns (
-        uint256 amount,
-        string memory description,
-        uint256 timestamp,
-        uint256 verificationCount,
-        uint256 rejectionCount,
-        bool processed,
-        bool approved,
-        bool autoRejected,
-        string[] memory evidences
-    ) {
-        return (
-            claimAmounts[contractId],
-            claimDescriptions[contractId],
-            claimTimestamps[contractId],
-            claimVerificationCounts[contractId],
-            claimRejectionCounts[contractId],
-            claimsProcessed[contractId],
-            claimsApproved[contractId],
-            claimAutoRejected[contractId],
-            claimEvidences[contractId]
-        );
+    function getClaimInfo(uint256 contractId) public view returns (bool processed, bool approved) {
+        return (claimsProcessed[contractId], claimsApproved[contractId]);
     }
 }

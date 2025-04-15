@@ -1,75 +1,111 @@
-# Fundit - Web3 보험 크라우드펀딩 플랫폼
+# Fundit - 블록체인 기반 보험 플랫폼
 
-Fundit은 Web3 기반의 양방향 참여형 보험 크라우드펀딩 플랫폼입니다. 기존의 보험 시장에서는 보험사가 상품을 만들고 소비자가 선택하는 단방향 구조였지만, Fundit에서는 사용자가 직접 보험 상품을 제안하고 보험사가 이를 입찰할 수 있는 혁신적인 플랫폼입니다.
-
-## 핵심 가치
-- **사용자 중심**: 사용자가 원하는 보험 상품을 직접 제안하고 설계
-- **투명성**: 블록체인 기반으로 모든 거래 내역이 공개되고 검증 가능
-- **효율성**: 스마트 컨트랙트를 통한 자동화된 계약 체결 및 보험금 지급
-- **보상**: 참여자들에게 토큰 보상을 통한 인센티브 제공
+## 소개
+Fundit은 블록체인 기술을 활용한 탈중앙화 보험 플랫폼입니다. 사용자가 원하는 보험 상품을 제안하고, 보험사가 이에 대해 입찰하는 방식으로 운영됩니다.
 
 ## 주요 기능
-
-### 1. 보험 상품 제안
-- 사용자가 원하는 보험 상품의 세부 조건을 제안
-- 제안 시 필요한 정보: 제목, 설명, 보험료, 보장금액, 보험 기간
-- 제안된 상품은 블록체인에 기록되어 투명하게 관리
-- 제안 목록 필터링 및 정렬 기능 제공
-
-### 2. 보험사 입찰
-- 등록된 보험사만 입찰 가능
-- 입찰 시 제시 정보: 보험료, 보장금액, 보장 조건
-- 여러 보험사의 경쟁 입찰을 통해 최적의 조건 도출
-
-### 3. 자동 계약 체결
-- 입찰 수락 시 스마트 컨트랙트를 통한 자동 계약 체결
-- 계약 조건이 블록체인에 기록되어 변경 불가
-- 계약 기간 동안 자동으로 보험료 관리
-
-### 4. 보험금 청구 및 지급
-- Chainlink 오라클을 활용한 자동화된 보험금 청구 검증
-- 다중 오라클 검증 시스템으로 신뢰성 강화
-- 최소 검증 수 요구 및 검증 시간 제한
-- 증거 기반의 청구 처리 시스템
-- 투명하고 신뢰할 수 있는 보험금 지급 프로세스
-
-### 5. DAO 토큰 보상
-- 리뷰 작성 시 품질에 따른 토큰 보상
-- 리뷰 품질 점수 시스템 (1-10점)
-- 리뷰 길이, 평점, 연속성에 따른 보상 차등
-- 토큰 보상을 통한 플랫폼 참여 유도
+- **보험 상품 제안**: 사용자가 원하는 보험 상품을 제안할 수 있습니다.
+- **보험사 입찰**: 등록된 보험사가 제안된 상품에 대해 입찰할 수 있습니다.
+- **계약 체결**: 제안자가 원하는 입찰을 선택하여 계약을 체결합니다.
+- **보험금 청구**: Oracle 시스템을 통해 청구의 정당성을 검증합니다.
+- **리뷰 및 보상**: 계약 완료 후 리뷰를 작성하고 토큰 보상을 받을 수 있습니다.
 
 ## 기술 스택
-- **스마트 컨트랙트**: Solidity, OpenZeppelin
-- **오라클**: Chainlink
-- **프론트엔드**: Next.js, TypeScript, TailwindCSS
-- **개발 환경**: Hardhat, TypeScript
-- **테스트**: Chai, Mocha
+- Solidity ^0.8.20
+- Hardhat ^2.19.4
+- OpenZeppelin Contracts ^5.0.1
+- Chainlink Oracle ^0.8.0
+- Node.js v18.18.2
+- npm v9.8.1 또는 yarn v1.22.19
 
-## 설치 및 실행
+## 설치 및 실행 방법
+
+### 사전 요구사항
+- Node.js v18.18.2
+- npm v9.8.1 또는 yarn v1.22.19
+- Git
+
+### 설치
+1. 저장소 클론
 ```bash
-# 의존성 설치
+git clone https://github.com/kyh1126/Fundit-prototype.git
+```
+
+2. 의존성 설치
+```bash
 npm install
+# 또는
+yarn install
+```
 
-# 컨트랙트 컴파일
-npx hardhat compile
+3. 환경 변수 설정
+```bash
+cp .env.example .env
+# .env 파일을 열어 필요한 값들을 설정
+```
 
-# 테스트 실행
-npx hardhat test
+### 로컬 개발 환경 실행
 
-# 로컬 네트워크 실행
+1. 로컬 블록체인 노드 실행
+```bash
 npx hardhat node
+```
 
-# 컨트랙트 배포
+2. 스마트 컨트랙트 배포
+```bash
 npx hardhat run scripts/deploy.js --network localhost
 ```
 
-## 스크립트 사용법
-- **보험 제안**: `npx hardhat run scripts/proposeInsurance.js --network localhost`
-- **입찰**: `npx hardhat run scripts/placeBid.js --network localhost`
-- **계약 생성**: `npx hardhat run scripts/createContract.js --network localhost`
-- **보험금 청구**: `npx hardhat run scripts/submitClaim.js --network localhost`
-- **리뷰 작성**: `npx hardhat run scripts/submitReview.js --network localhost`
+## 테스트 방법
+
+### 스마트 컨트랙트 테스트
+```bash
+npx hardhat test
+```
+
+### 주요 테스트 시나리오
+
+1. 보험 상품 제안 테스트
+```bash
+npx hardhat test test/Fundit.test.ts --grep "제안"
+```
+
+2. 입찰 테스트
+```bash
+npx hardhat test test/Fundit.test.ts --grep "입찰"
+```
+
+3. 계약 체결 테스트
+```bash
+npx hardhat test test/Fundit.test.ts --grep "계약"
+```
+
+4. 보험금 청구 테스트
+```bash
+npx hardhat test test/Fundit.test.ts --grep "청구"
+```
+
+5. 리뷰 및 보상 테스트
+```bash
+npx hardhat test test/Fundit.test.ts --grep "리뷰"
+```
+
+### 테스트용 계정 정보
+로컬 개발 환경에서 사용할 수 있는 테스트 계정입니다:
+
+1. 소유자 계정
+- 주소: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+- 역할: 컨트랙트 소유자, 관리자
+
+2. 보험사 계정
+- 주소: 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+- 역할: 보험 상품 입찰
+
+3. Oracle 계정
+- 주소: 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+- 역할: 보험금 청구 검증
+
+**주의**: 이 계정들은 로컬 개발 환경에서만 사용하세요. 실제 네트워크에서는 절대 이 계정들을 사용하지 마세요.
 
 ## 라이선스
 이 프로젝트는 MIT 라이선스를 따릅니다.
