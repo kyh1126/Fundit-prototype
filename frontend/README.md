@@ -4,13 +4,13 @@
 Fundit 블록체인 보험 플랫폼의 프론트엔드 애플리케이션입니다. Next.js와 TypeScript를 기반으로 구축되었으며, Web3 기능을 통합하여 블록체인과 상호작용합니다.
 
 ## 주요 기능
-- **지갑 연결**: MetaMask를 통한 이더리움 지갑 연결
+- **지갑 연결**: MetaMask 또는 WalletConnect를 통한 지갑 연결
 - **보험 제안**: 새로운 보험 상품 제안 및 목록 조회
 - **입찰 관리**: 보험사의 입찰 제출 및 조회
 - **계약 관리**: 보험 계약 체결 및 상태 관리
 - **보험금 청구**: 보험금 청구 및 Oracle 검증 프로세스
 
-## 기술 스택
+## 기술 스택 - 프론트엔드
 - Next.js 14.0.4: 프론트엔드 프레임워크
 - TypeScript 5.3.3: 타입 안정성
 - Tailwind CSS ^3.4.1: UI 스타일링
@@ -22,13 +22,13 @@ Fundit 블록체인 보험 플랫폼의 프론트엔드 애플리케이션입니
 
 ### 사전 요구사항
 - Node.js v18 이상
-- MetaMask 지갑
+- Web3 지갑 (MetaMask 또는 WalletConnect 지원 지갑)
 - 로컬 블록체인 노드 실행 중 (또는 Base Goerli 테스트넷 연결)
 
 ### 환경 변수 설정
 1. `.env.local` 파일을 생성하고 다음 값들을 설정:
 ```bash
-# WalletConnect 프로젝트 ID (https://cloud.walletconnect.com/에서 생성)
+# WalletConnect 프로젝트 ID (필수, https://cloud.walletconnect.com/에서 생성)
 NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_project_id
 
 # 배포된 Fundit 컨트랙트 주소
@@ -49,8 +49,8 @@ npm run dev
 2. 브라우저에서 접속:
 - 기본 URL: http://localhost:3000
 
-### MetaMask 설정
-1. 로컬 네트워크 사용 시:
+### 지갑 설정
+1. MetaMask 사용 시:
    - 네트워크 추가: 
      - 네트워크 이름: Hardhat Local
      - RPC URL: http://127.0.0.1:8545
@@ -64,6 +64,11 @@ npm run dev
      - 체인 ID: 84531
      - 통화 기호: ETH
      - 블록 탐색기: https://goerli.basescan.org
+
+3. WalletConnect 사용 시:
+   - 지원되는 모든 Web3 지갑 사용 가능
+   - QR 코드 스캔으로 연결
+   - 자동 네트워크 전환 지원
 
 ### 개발 모드 특이사항
 1. 자동 새로고침:
