@@ -108,14 +108,129 @@ npm run dev
 ```
 frontend/
 ├── src/
-│   ├── app/              # Next.js 13+ App Router
-│   ├── components/       # 재사용 가능한 컴포넌트
-│   ├── styles/          # 스타일 관련 파일
-│   └── utils/           # 유틸리티 함수
-├── public/              # 정적 파일
-└── package.json         # 프로젝트 설정 및 의존성
+│   ├── app/                    # Next.js 13+ App Router
+│   │   ├── page.tsx           # 메인 페이지
+│   │   ├── proposals/        # 보험 제안 관련 페이지
+│   │   ├── contracts/        # 계약 관리 페이지
+│   │   └── claims/          # 보험금 청구 페이지
+│   ├── components/            # 재사용 가능한 컴포넌트
+│   │   ├── common/          # 공통 컴포넌트
+│   │   ├── proposals/       # 제안 관련 컴포넌트
+│   │   ├── contracts/       # 계약 관련 컴포넌트
+│   │   └── claims/         # 청구 관련 컴포넌트
+│   ├── contracts/            # 스마트 컨트랙트 연동
+│   │   ├── abi.ts          # 컨트랙트 ABI
+│   │   └── config.ts       # 컨트랙트 설정
+│   ├── store/               # 상태 관리
+│   │   ├── useStore.ts     # Zustand 스토어
+│   │   └── slices/         # 기능별 상태 관리
+│   ├── hooks/               # 커스텀 훅
+│   │   ├── useWeb3.ts      # Web3 관련 훅
+│   │   └── useContract.ts  # 컨트랙트 관련 훅
+│   └── utils/               # 유틸리티 함수
+├── public/                  # 정적 파일
+└── styles/                  # 스타일 파일
 ```
+
+## 주요 기능 구현
+
+### 1. 지갑 연결
+- MetaMask 및 WalletConnect 지원
+- 네트워크 자동 전환
+- 지갑 상태 관리
+
+### 2. 보험 제안
+- 제안서 작성 폼
+- 제안 목록 조회
+- 제안 상세 정보 표시
+- 필터링 및 정렬 기능
+
+### 3. 입찰 관리
+- 입찰 제출 폼
+- 입찰 목록 조회
+- 입찰 상태 추적
+- 입찰 수락/거절
+
+### 4. 계약 관리
+- 계약 상세 정보 표시
+- 계약 상태 추적
+- 보험료 납부 처리
+- 계약 문서 조회
+
+### 5. 보험금 청구
+- 청구서 제출 폼
+- 청구 상태 추적
+- Oracle 검증 결과 표시
+- 보험금 지급 내역
+
+### 6. 리뷰 시스템
+- 리뷰 작성 폼
+- 리뷰 목록 조회
+- 토큰 보상 내역
+- 리뷰 평가
+
+## 상태 관리
+### Zustand 스토어 구조
+```typescript
+interface Store {
+  // 월렛 관련
+  account: string | null;
+  chainId: number | null;
+  
+  // 제안 관련
+  proposals: Proposal[];
+  selectedProposal: Proposal | null;
+  
+  // 계약 관련
+  contracts: Contract[];
+  selectedContract: Contract | null;
+  
+  // 청구 관련
+  claims: Claim[];
+  selectedClaim: Claim | null;
+}
+```
+
+## 스타일 가이드
+- Tailwind CSS 클래스 네이밍 규칙
+- 반응형 디자인 브레이크포인트
+- 컬러 팔레트
+- 타이포그래피
+
+## 성능 최적화
+- 이미지 최적화
+- 코드 스플리팅
+- 상태 관리 최적화
+- 메모이제이션
 
 ## 테스트
+```bash
+# 단위 테스트 실행
+npm run test
 
+# E2E 테스트 실행
+npm run test:e2e
 ```
+
+## 배포
+```bash
+# 프로덕션 빌드
+npm run build
+
+# 정적 파일 내보내기
+npm run export
+```
+
+## 문제 해결
+### 자주 발생하는 문제
+1. MetaMask 연결 오류
+   - 네트워크 확인
+   - 지갑 새로고침
+
+2. 트랜잭션 실패
+   - 가스비 확인
+   - 네트워크 상태 확인
+
+3. 컨트랙트 상호작용 오류
+   - ABI 버전 확인
+   - 컨트랙트 주소 확인
