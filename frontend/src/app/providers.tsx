@@ -1,20 +1,19 @@
 'use client'
 
 import { RainbowKitProvider } from '@rainbow-me/rainbowkit'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import '@rainbow-me/rainbowkit/styles.css'
 import { WagmiConfig } from 'wagmi'
-import { chains, wagmiConfig } from '@/config/web3'
-
-const queryClient = new QueryClient()
+import { QueryClientProvider } from '@tanstack/react-query'
+import { config, queryClient } from '@/config/web3'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <WagmiConfig config={wagmiConfig}>
-      <RainbowKitProvider chains={chains}>
-        <QueryClientProvider client={queryClient}>
+    <WagmiConfig config={config}>
+      <QueryClientProvider client={queryClient}>
+        <RainbowKitProvider>
           {children}
-        </QueryClientProvider>
-      </RainbowKitProvider>
+        </RainbowKitProvider>
+      </QueryClientProvider>
     </WagmiConfig>
   )
 } 

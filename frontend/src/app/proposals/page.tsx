@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useStore } from '@/store/useStore'
+import { usePublicClient } from 'wagmi'
 import Link from 'next/link'
 import { formatEther } from 'viem'
 
@@ -21,7 +22,9 @@ interface Filter {
 }
 
 export default function ProposalsPage() {
-  const { proposals, loading, error, fetchProposals } = useStore()
+  const store = useStore()
+  const { proposals, loading, error, fetchProposals } = store
+  const publicClient = usePublicClient()
   
   // 필터 상태 관리
   const [filters, setFilters] = useState<Filter>({
@@ -33,8 +36,10 @@ export default function ProposalsPage() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
 
   useEffect(() => {
-    fetchProposals()
-  }, [fetchProposals])
+    if (typeof fetchProposals === 'function' && publicClient) {
+      fetchProposals(publicClient)
+    }
+  }, [fetchProposals, publicClient])
 
   // 정렬 핸들러
   const handleSort = (field: SortField) => {
@@ -55,7 +60,7 @@ export default function ProposalsPage() {
   }
 
   // 필터링 및 정렬된 제안 목록
-  const filteredAndSortedProposals = proposals
+  const filteredAndSortedProposals = (proposals ?? [])
     .filter(proposal => {
       // 상태 필터
       if (filters.status === 'active' && !proposal.isActive) return false
@@ -92,6 +97,7 @@ export default function ProposalsPage() {
 
   if (loading) return <div className="flex justify-center p-8">로딩 중...</div>
   if (error) return <div className="text-red-500 p-8">오류: {error}</div>
+  if (!proposals) return <div className="flex justify-center p-8">제안 목록을 불러오는 중...</div>
 
   return (
     <div className="container mx-auto px-4 py-8">

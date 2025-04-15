@@ -13,7 +13,7 @@ class ContractManager {
      * @param {string} tokenAddress - FunditToken 컨트랙트 주소
      */
     constructor(contractAddress, tokenAddress) {
-        this.contractAddress = contractAddress;
+    this.contractAddress = contractAddress;
         this.tokenAddress = tokenAddress;
         this.contract = null;
         this.tokenContract = null;
@@ -322,7 +322,7 @@ class ContractManager {
         try {
             const balance = await this.tokenContract.balanceOf(address);
             return ethers.formatEther(balance);
-        } catch (error) {
+    } catch (error) {
             console.error("토큰 잔액 조회 중 오류 발생:", error);
             throw error;
         }
@@ -352,7 +352,7 @@ class ContractManager {
         try {
             const count = await this.tokenContract.getUserReviewCount(address);
             return count.toString();
-        } catch (error) {
+    } catch (error) {
             console.error("리뷰 수 조회 중 오류 발생:", error);
             throw error;
         }
@@ -385,7 +385,7 @@ class ContractManager {
             const receipt = await tx.wait();
             console.log("추가 정보 보상이 지급되었습니다:", receipt);
             return receipt;
-        } catch (error) {
+    } catch (error) {
             console.error("추가 정보 보상 지급 중 오류 발생:", error);
             throw error;
         }
@@ -417,7 +417,7 @@ class ContractManager {
             const receipt = await tx.wait();
             console.log("컨트랙트가 재개되었습니다:", receipt);
             return receipt;
-        } catch (error) {
+    } catch (error) {
             console.error("컨트랙트 재개 중 오류 발생:", error);
             throw error;
         }
@@ -452,8 +452,8 @@ class ContractManager {
         } catch (error) {
             console.error("토큰 컨트랙트 재개 중 오류 발생:", error);
             throw error;
-        }
     }
+  }
 }
 
 module.exports = ContractManager;

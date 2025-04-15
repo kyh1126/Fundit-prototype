@@ -1,5 +1,5 @@
-import type { HardhatUserConfig } from "hardhat/config";
-import "@nomicfoundation/hardhat-toolbox-viem";
+import { HardhatUserConfig } from "hardhat/config";
+import "@nomicfoundation/hardhat-toolbox";
 import "@nomicfoundation/hardhat-viem";
 import "@typechain/hardhat";
 import "dotenv/config";
@@ -7,7 +7,7 @@ import "dotenv/config";
 const config: HardhatUserConfig = {
   // Solidity 컴파일러 설정
   solidity: {
-    version: "0.8.28",
+    version: "0.8.20",
     settings: {
       optimizer: {
         enabled: true,
@@ -24,6 +24,9 @@ const config: HardhatUserConfig = {
       accounts: process.env.TESTNET_PRIVATE_KEY ? [process.env.TESTNET_PRIVATE_KEY] : [],
       chainId: 84532,
     },
+    localhost: {
+      url: "http://127.0.0.1:8545"
+    }
   },
 
   // TypeChain 설정

@@ -1,17 +1,18 @@
-import hre from "hardhat";
+import { ethers } from "hardhat";
 
 async function main() {
   // FunditToken 배포
-  const funditToken = await hre.viem.deployContract("FunditToken");
-  console.log("FunditToken deployed to:", funditToken.address);
+  const FunditToken = await ethers.getContractFactory("FunditToken");
+  const funditToken = await FunditToken.deploy();
+  await funditToken.waitForDeployment();
+  const funditTokenAddress = await funditToken.getAddress();
+  console.log("FunditToken deployed to:", funditTokenAddress);
 
   // Fundit 배포
-  const fundit = await hre.viem.deployContract("Fundit");
-  console.log("Fundit deployed to:", fundit.address);
-
-  // Fundit에 FunditToken 설정
-  await fundit.write.setFunditToken([funditToken.address]);
-  console.log("FunditToken set in Fundit contract");
+  const Fundit = await ethers.getContractFactory("Fundit");
+  const fundit = await Fundit.deploy([funditTokenAddress]);
+  await fundit.waitForDeployment();
+  console.log("Fundit deployed to:", await fundit.getAddress());
 }
 
 main()

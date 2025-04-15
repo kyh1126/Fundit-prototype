@@ -6,15 +6,11 @@ import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
-import "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import "./FunditToken.sol";
 
 /**
  * @title Fundit
- * @dev 보험 상품 제안 및 계약 플랫폼
- * - 사용자가 보험 상품을 제안하고 보험사가 입찰하여 계약을 체결
- * - Oracle 시스템을 통한 보험금 청구 검증
- * - 리뷰 및 토큰 보상 시스템
+ * @dev 사용자가 보험 상품을 제안하고 보험사가 입찰하여 계약을 체결하는 플랫폼
  */
 contract Fundit is Ownable, Pausable, ReentrancyGuard {
     using Counters for Counters.Counter;
@@ -60,7 +56,7 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         uint256 endDate;         // 종료일
         bool active;             // 활성화 여부
         bool claimed;            // 청구 여부
-        bool exists;             // 존재 여부
+        bool exists;     // 계약 존재 여부
     }
     
     // 매핑
@@ -78,8 +74,8 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     mapping(uint256 => address) public contractOracles;          // 계약별 Oracle
     mapping(address => bool) public registeredOracles;           // 등록된 Oracle
     mapping(uint256 => bool) public claimsProcessed;            // 처리된 청구
-    mapping(uint256 => uint256) public claimAmounts;            // 청구 금액
     mapping(uint256 => bool) public claimsApproved;             // 승인된 청구
+    mapping(uint256 => uint256) public claimAmounts;            // 청구 금액
     mapping(uint256 => uint256) public claimTimestamps;         // 청구 시간
     mapping(uint256 => uint256) public claimVerificationCounts; // 검증 횟수
     mapping(uint256 => mapping(address => bool)) public oracleVerifications; // Oracle 검증 결과
@@ -116,6 +112,8 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     event PaymentProcessed(uint256 indexed contractId, address indexed recipient, uint256 amount);
     event ReviewSubmitted(uint256 indexed contractId, address indexed reviewer, string content, uint256 rating);
     event ReviewRewarded(uint256 indexed contractId, address indexed reviewer, uint256 amount);
+    event OracleRegistered(address indexed oracle);
+    event OracleUnregistered(address indexed oracle);
     
     // 상수
     uint256 public constant MIN_PROPOSAL_DURATION = 1 days;     // 최소 제안 기간
@@ -142,7 +140,7 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
      * @param description 제안 설명
      * @param premium 보험료
      * @param coverage 보장 금액
-     * @param duration 제안 기간 (초)
+     * @param duration 제안 기간 (일)
      */
     function proposeInsurance(
         string memory title,
@@ -437,22 +435,6 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     }
     
     /**
-     * @dev Oracle 등록 (소유자만 가능)
-     * @param oracleAddress Oracle 주소
-     */
-    function registerOracle(address oracleAddress) external onlyOwner {
-        registeredOracles[oracleAddress] = true;
-    }
-    
-    /**
-     * @dev Oracle 등록 해제 (소유자만 가능)
-     * @param oracleAddress Oracle 주소
-     */
-    function unregisterOracle(address oracleAddress) external onlyOwner {
-        registeredOracles[oracleAddress] = false;
-    }
-    
-    /**
      * @dev Oracle 검증 결과 제출
      * @param contractId 계약 ID
      * @param approved 승인 여부
@@ -463,8 +445,7 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         bool approved,
         string memory evidence
     ) external nonReentrant whenNotPaused {
-        require(registeredOracles[msg.sender], unicode"인증된 Oracle만 검증할 수 있습니다");
-        require(contractOracles[contractId] == msg.sender, unicode"계약에 할당된 Oracle만 검증할 수 있습니다");
+        require(contractOracles[contractId] == msg.sender, unicode"인증된 Oracle만 검증할 수 있습니다");
         require(!claimsProcessed[contractId], unicode"이미 처리된 청구입니다");
         require(!oracleVerifications[contractId][msg.sender], unicode"이미 검증한 Oracle입니다");
         require(block.timestamp <= claimTimestamps[contractId] + VERIFICATION_TIMEOUT, unicode"검증 기간이 만료되었습니다");
@@ -618,7 +599,10 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         qualityScore = (qualityScore * rating) / 5;
         
         // Reward the user with tokens
-        funditToken.rewardReview(msg.sender, content, rating);
+        if (address(funditToken) != address(0)) {
+            funditToken.rewardReview(msg.sender, content, rating);
+            emit ReviewRewarded(contractId, msg.sender, qualityScore);
+        }
     }
     
     /**
@@ -649,7 +633,56 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
      * @dev 청구 정보 조회
      * @param contractId 계약 ID
      */
-    function getClaimInfo(uint256 contractId) public view returns (bool processed, bool approved) {
-        return (claimsProcessed[contractId], claimsApproved[contractId]);
+    function getClaimInfo(uint256 contractId) external view returns (
+        uint256 amount,
+        string memory description,
+        uint256 timestamp,
+        uint256 verificationCount,
+        uint256 rejectionCount,
+        bool processed,
+        bool approved,
+        bool autoRejected,
+        string[] memory evidences
+    ) {
+        return (
+            claimAmounts[contractId],
+            claimDescriptions[contractId],
+            claimTimestamps[contractId],
+            claimVerificationCounts[contractId],
+            claimRejectionCounts[contractId],
+            claimsProcessed[contractId],
+            claimsApproved[contractId],
+            claimAutoRejected[contractId],
+            claimEvidences[contractId]
+        );
+    }
+
+    /**
+     * @dev Oracle을 등록합니다.
+     * @param oracle Oracle 주소
+     */
+    function registerOracle(address oracle) external onlyOwner {
+        require(oracle != address(0), unicode"유효하지 않은 Oracle 주소입니다");
+        require(!registeredOracles[oracle], unicode"이미 등록된 Oracle입니다");
+        registeredOracles[oracle] = true;
+        emit OracleRegistered(oracle);
+    }
+
+    /**
+     * @dev Oracle을 등록 해제합니다.
+     * @param oracle Oracle 주소
+     */
+    function unregisterOracle(address oracle) external onlyOwner {
+        require(registeredOracles[oracle], unicode"등록되지 않은 Oracle입니다");
+        registeredOracles[oracle] = false;
+        emit OracleUnregistered(oracle);
+    }
+
+    /**
+     * @dev 전체 제안 수를 반환합니다.
+     * @return 전체 제안 수
+     */
+    function getProposalCount() public view returns (uint256) {
+        return _proposalIds.current();
     }
 }

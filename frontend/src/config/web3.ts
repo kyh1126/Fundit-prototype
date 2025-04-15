@@ -1,26 +1,20 @@
 import { getDefaultWallets } from '@rainbow-me/rainbowkit'
-import { configureChains, createConfig } from 'wagmi'
-import { baseGoerli } from 'wagmi/chains'
-import { publicProvider } from 'wagmi/providers/public'
+import { createConfig, http } from 'wagmi'
+import { localhost } from 'wagmi/chains'
+import { QueryClient } from '@tanstack/react-query'
 
-// 체인 및 프로바이더 설정
-const { chains, publicClient } = configureChains(
-  [baseGoerli],
-  [publicProvider()]
-)
-
-// 지갑 커넥터 설정
-const { connectors } = getDefaultWallets({
+const { wallets, connectors } = getDefaultWallets({
   appName: 'Fundit',
-  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '',
-  chains,
+  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!,
+  chains: [localhost],
 })
 
-// Wagmi 설정
-export const wagmiConfig = createConfig({
-  autoConnect: true,
+export const config = createConfig({
   connectors,
-  publicClient,
+  chains: [localhost],
+  transports: {
+    [localhost.id]: http(),
+  },
 })
 
-export { chains } 
+export const queryClient = new QueryClient() 

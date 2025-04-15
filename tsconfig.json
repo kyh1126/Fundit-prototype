@@ -9,10 +9,40 @@
     "resolveJsonModule": true,
     "baseUrl": ".",
     "paths": {
-      "*": ["node_modules/*"]
+      "*": [
+        "node_modules/*"
+      ]
     },
-    "typeRoots": ["./node_modules/@types", "./typechain-types"]
+    "typeRoots": [
+      "./node_modules/@types",
+      "./typechain-types"
+    ],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "allowJs": true,
+    "noEmit": true,
+    "incremental": true,
+    "moduleResolution": "node",
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
   },
-  "include": ["./test", "./typechain-types"],
-  "files": ["./hardhat.config.ts"]
+  "include": [
+    "./test",
+    "./typechain-types",
+    ".next/types/**/*.ts"
+  ],
+  "files": [
+    "./hardhat.config.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }
