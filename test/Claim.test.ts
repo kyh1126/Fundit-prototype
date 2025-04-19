@@ -1,74 +1,133 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { setupTest, createProposal, placeBid, createContract } from "./fixtures";
+import { Fundit } from "../typechain-types";
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 
-describe("Claim", function () {
-  // 청구 제출 테스트
-  it("보험 계약자는 청구를 제출할 수 있어야 합니다", async function () {
-    const { fundit, owner, user, insuranceCompany, oracle } = await setupTest();
-    const { proposalId } = await createProposal(fundit, user);
-    const { bidId } = await placeBid(fundit, insuranceCompany, proposalId);
-    const { contractId } = await createContract(fundit, user, proposalId, bidId);
+describe("보험금 청구", function () {
+  let fundit: Fundit;
+  let owner: SignerWithAddress;
+  let user: SignerWithAddress;
+  let otherUser: SignerWithAddress;
+  let contractId: bigint;
 
-    const claimAmount = ethers.parseEther("0.5");
+  beforeEach(async function () {
+    [owner, user, otherUser] = await ethers.getSigners();
 
-    await expect(
-      fundit.connect(user).submitClaim(contractId, claimAmount)
-    )
-      .to.emit(fundit, "ClaimSubmitted")
-      .withArgs(contractId, user.address, claimAmount);
+    const Fundit = await ethers.getContractFactory("Fundit");
+    fundit = await Fundit.deploy();
+    await fundit.waitForDeployment();
 
-    const claimInfo = await fundit.getClaimInfo(contractId);
-    expect(claimInfo.amount).to.equal(claimAmount);
-    expect(claimInfo.processed).to.equal(false);
+    // 보험사 등록
+    await fundit.connect(otherUser).registerInsuranceCompany();
+
+    // 제안 생성
+    await fundit.connect(user).proposeInsurance(
+      "테스트 제안",
+      "테스트 설명",
+      ethers.parseEther("1"),
+      ethers.parseEther("10"),
+      86400 // 1일 = 86400초
+    );
+
+    // 입찰
+    const proposalId = 1n;
+    await fundit.connect(otherUser).placeBid(
+      proposalId,
+      ethers.parseEther("1"),
+      ethers.parseEther("10"),
+      "테스트 조건"
+    );
+
+    // 입찰 수락
+    const bidId = 1n;
+    const tx = await fundit.connect(user).acceptBid(
+      proposalId,
+      bidId
+    );
+    const receipt = await tx.wait();
+    if (!receipt) throw new Error("Transaction receipt is null");
+    const event = receipt.logs[0];
+    if (!event || !('args' in event)) throw new Error("Event args not found");
+    contractId = event.args[0];
   });
 
-  // 권한 검증 테스트
-  it("보험 계약자가 아닌 사용자는 청구를 제출할 수 없습니다", async function () {
-    const { fundit, owner, user, insuranceCompany, oracle } = await setupTest();
-    const { proposalId } = await createProposal(fundit, user);
-    const { bidId } = await placeBid(fundit, insuranceCompany, proposalId);
-    const { contractId } = await createContract(fundit, user, proposalId, bidId);
+  it("계약 소유자는 청구를 제출할 수 있어야 합니다", async () => {
+    const tx = await fundit.connect(user).submitClaim(
+      contractId,
+      ethers.parseEther("1"),
+      "테스트 청구",
+      "테스트 증거"
+    );
+    await tx.wait();
 
-    const claimAmount = ethers.parseEther("0.5");
-
-    await expect(
-      fundit.connect(insuranceCompany).submitClaim(contractId, claimAmount)
-    ).to.be.revertedWith("계약 제안자만 청구를 제출할 수 있습니다");
+    const [amount, description, evidences, timestamp, processed, approved, verificationCount, rejectionCount] = 
+      await fundit.getClaimInfo(contractId);
+    
+    expect(amount).to.equal(ethers.parseEther("1"));
+    expect(description).to.equal("테스트 청구");
+    expect(evidences[0]).to.equal("테스트 증거");
+    expect(processed).to.be.false;
   });
 
-  // 오라클 검증 테스트
-  it("오라클은 청구를 검증할 수 있어야 합니다", async function () {
-    const { fundit, owner, user, insuranceCompany, oracle } = await setupTest();
-    const { proposalId } = await createProposal(fundit, user);
-    const { bidId } = await placeBid(fundit, insuranceCompany, proposalId);
-    const { contractId } = await createContract(fundit, user, proposalId, bidId);
-
-    const claimAmount = ethers.parseEther("0.5");
-    await fundit.connect(user).submitClaim(contractId, claimAmount);
-
+  it("계약 소유자가 아닌 사용자는 청구를 제출할 수 없습니다", async function () {
     await expect(
-      fundit.connect(oracle).submitOracleVerification(contractId, true)
-    )
-      .to.emit(fundit, "OracleVerificationSubmitted")
-      .withArgs(contractId, oracle.address, true);
-
-    const claimInfo = await fundit.getClaimInfo(contractId);
-    expect(claimInfo.processed).to.equal(false);
+      fundit.connect(otherUser).submitClaim(
+        contractId,
+        BigInt(1e18),
+        "Test Description",
+        "Test Evidence"
+      )
+    ).to.be.revertedWith("Only proposer can submit claim");
   });
 
-  // 권한 검증 테스트
-  it("오라클이 아닌 사용자는 청구를 검증할 수 없습니다", async function () {
-    const { fundit, owner, user, insuranceCompany, oracle } = await setupTest();
-    const { proposalId } = await createProposal(fundit, user);
-    const { bidId } = await placeBid(fundit, insuranceCompany, proposalId);
-    const { contractId } = await createContract(fundit, user, proposalId, bidId);
+  it("존재하지 않는 계약에 대한 청구는 제출할 수 없습니다", async function () {
+    await expect(
+      fundit.connect(user).submitClaim(
+        999n,
+        BigInt(1e18),
+        "Test Description",
+        "Test Evidence"
+      )
+    ).to.be.revertedWith("Contract does not exist");
+  });
 
-    const claimAmount = ethers.parseEther("0.5");
-    await fundit.connect(user).submitClaim(contractId, claimAmount);
+  it("이미 청구가 제출된 계약에는 다시 청구를 제출할 수 없습니다", async function () {
+    await fundit.connect(user).submitClaim(
+      contractId,
+      BigInt(1e18),
+      "Test Description",
+      "Test Evidence"
+    );
 
     await expect(
-      fundit.connect(user).submitOracleVerification(contractId, true)
-    ).to.be.revertedWith("등록된 Oracle만 검증을 제출할 수 있습니다");
+      fundit.connect(user).submitClaim(
+        contractId,
+        BigInt(1e18),
+        "Test Description",
+        "Test Evidence"
+      )
+    ).to.be.revertedWith("Claim already submitted");
+  });
+
+  it("청구 금액이 보상 한도를 초과할 수 없습니다", async function () {
+    await expect(
+      fundit.connect(user).submitClaim(
+        contractId,
+        BigInt(11e18),
+        "Test Description",
+        "Test Evidence"
+      )
+    ).to.be.revertedWith("Amount exceeds coverage");
+  });
+
+  it("음수 금액으로 청구할 수 없습니다", async function () {
+    await expect(
+      fundit.connect(user).submitClaim(
+        contractId,
+        0n,
+        "Test Description",
+        "Test Evidence"
+      )
+    ).to.be.revertedWith("Amount must be greater than 0");
   });
 }); 

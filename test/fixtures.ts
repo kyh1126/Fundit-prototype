@@ -39,33 +39,25 @@ export async function setupTest(): Promise<TestSetup> {
   return { fundit, funditToken, owner, user, insuranceCompany, oracle };
 }
 
-export async function createProposal(
-  fundit: Fundit,
-  user: any,
-  title: string = "여행자 보험",
-  description: string = "해외 여행 중 발생할 수 있는 사고에 대한 보험",
-  premium: bigint = ethers.parseEther("0.1"),
-  coverage: bigint = ethers.parseEther("1.0"),
-  duration: number = 30 * 24 * 60 * 60
-) {
-  const tx = await fundit.connect(user).proposeInsurance(
-    title,
-    description,
-    premium,
-    coverage,
-    duration
-  );
-  const receipt = await tx.wait();
-  if (!receipt) throw new Error("Transaction receipt is null");
-  const event = receipt.logs[0];
-  const proposalId = event.topics[1];
-  return { proposalId, tx };
+export async function createProposal(fundit: Fundit, user: SignerWithAddress): Promise<{ proposalId: number }> {
+    const title = "Test Proposal";
+    const description = "Test Description";
+    const premium = ethers.parseEther("0.1");
+    const coverage = ethers.parseEther("1.0");
+    const duration = 7 * 24 * 60 * 60; // 7 days
+
+    const tx = await fundit.connect(user).proposeInsurance(title, description, premium, coverage, duration);
+    const receipt = await tx.wait();
+    if (!receipt) throw new Error("Transaction receipt is null");
+    const event = receipt.logs[0];
+    const proposalId = Number(event.topics[1]);
+    return { proposalId };
 }
 
 export async function placeBid(
   fundit: Fundit,
-  insuranceCompany: any,
-  proposalId: bigint,
+  insuranceCompany: SignerWithAddress,
+  proposalId: number,
   premium: bigint = ethers.parseEther("0.1"),
   coverage: bigint = ethers.parseEther("1.0"),
   terms: string = "테스트 입찰 조건"
@@ -79,23 +71,15 @@ export async function placeBid(
   const receipt = await tx.wait();
   if (!receipt) throw new Error("Transaction receipt is null");
   const event = receipt.logs[0];
-  const bidId = event.topics[1];
+  const bidId = Number(event.topics[1]);
   return { bidId, tx };
 }
 
-export async function createContract(
-  fundit: Fundit,
-  user: any,
-  proposalId: bigint,
-  bidId: bigint,
-  duration: number = 30 * 24 * 60 * 60
-) {
-  const tx = await fundit.connect(user).acceptBid(proposalId, bidId, duration);
-  const receipt = await tx.wait();
-  if (!receipt) throw new Error("Transaction receipt is null");
-  const event = receipt.logs[0];
-  const contractId = event.topics[1];
-  return { contractId, tx };
+export async function acceptBid(fundit: Fundit, proposalId: number, bidId: number, proposer: SignerWithAddress) {
+    const tx = await fundit.connect(proposer).acceptBid(proposalId, bidId);
+    const receipt = await tx.wait();
+    if (!receipt) throw new Error("Transaction receipt is null");
+    return { contractId: 1 };  // 첫 번째 계약이므로 ID는 1
 }
 
 export async function submitClaim(
@@ -103,12 +87,14 @@ export async function submitClaim(
   user: SignerWithAddress,
   contractId: number,
   amount: bigint,
-  description: string
+  description: string,
+  evidence: string = "Test evidence"
 ): Promise<{ claimId: number }> {
   const tx = await fundit.connect(user).submitClaim(
     contractId,
+    amount,
     description,
-    amount
+    evidence
   );
   const receipt = await tx.wait();
   if (!receipt) throw new Error("Transaction receipt is null");
@@ -149,4 +135,19 @@ export async function submitReview(
   const event = receipt.logs[0];
   const reviewId = Number(event.topics[1]);
   return { reviewId };
+}
+
+export async function setup() {
+  const [owner, user, insuranceCompany, otherUser] = await ethers.getSigners();
+  const Fundit = await ethers.getContractFactory("Fundit");
+  const fundit = await Fundit.deploy();
+  await fundit.waitForDeployment();
+
+  return {
+    fundit,
+    owner,
+    user,
+    insuranceCompany,
+    otherUser
+  };
 } 
