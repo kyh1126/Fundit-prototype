@@ -28,7 +28,7 @@ describe("Contract", function () {
 
     await expect(
       createContract(this.fundit, this.insuranceCompany, BigInt(proposalId), BigInt(bidId))
-    ).to.be.revertedWith("Not proposal owner");
+    ).to.be.revertedWith("제안의 소유자가 아닙니다");
   });
 
   it("존재하지 않는 제안에 대한 입찰은 수락할 수 없습니다", async function () {
@@ -36,7 +36,7 @@ describe("Contract", function () {
     
     await expect(
       placeBid(this.fundit, this.insuranceCompany, nonExistentProposalId)
-    ).to.be.revertedWith("Proposal does not exist");
+    ).to.be.revertedWith("존재하지 않는 제안입니다");
   });
 
   it("존재하지 않는 입찰은 수락할 수 없습니다", async function () {
@@ -45,7 +45,7 @@ describe("Contract", function () {
 
     await expect(
       createContract(this.fundit, this.user, BigInt(proposalId), nonExistentBidId)
-    ).to.be.revertedWith("Bid does not exist");
+    ).to.be.revertedWith("존재하지 않는 입찰입니다");
   });
 
   it("비활성화된 제안에 대한 입찰은 수락할 수 없습니다", async function () {
@@ -57,6 +57,6 @@ describe("Contract", function () {
 
     await expect(
       createContract(this.fundit, this.user, BigInt(proposalId), BigInt(bidId))
-    ).to.be.revertedWith("Proposal is not active");
+    ).to.be.revertedWith("제안이 활성화 상태가 아닙니다");
   });
 }); 

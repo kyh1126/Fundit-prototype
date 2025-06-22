@@ -68,13 +68,15 @@ export async function placeBid(
   proposalId: bigint,
   premium: bigint = ethers.parseEther("0.1"),
   coverage: bigint = ethers.parseEther("1.0"),
-  terms: string = "테스트 입찰 조건"
+  terms: string = "테스트 입찰 조건",
+  bidDuration: number = 3 * 24 * 60 * 60 // 3일
 ) {
   const tx = await fundit.connect(insuranceCompany).placeBid(
     proposalId,
     premium,
     coverage,
-    terms
+    terms,
+    bidDuration
   );
   const receipt = await tx.wait();
   if (!receipt) throw new Error("Transaction receipt is null");
@@ -105,10 +107,12 @@ export async function submitClaim(
   amount: bigint,
   description: string
 ): Promise<{ claimId: number }> {
+  const evidence = "테스트 증거: 청구에 대한 상세한 증거 자료입니다. 이 증거는 청구의 유효성을 입증하기 위한 충분한 정보를 포함하고 있습니다.";
   const tx = await fundit.connect(user).submitClaim(
     contractId,
     description,
-    amount
+    amount,
+    evidence
   );
   const receipt = await tx.wait();
   if (!receipt) throw new Error("Transaction receipt is null");
@@ -120,14 +124,14 @@ export async function submitClaim(
 export async function submitOracleVerification(
   fundit: Fundit,
   oracle: SignerWithAddress,
-  claimId: number,
-  result: boolean,
-  comment: string
+  contractId: number,
+  approved: boolean,
+  evidence: string
 ): Promise<void> {
   const tx = await fundit.connect(oracle).submitOracleVerification(
-    claimId,
-    result,
-    comment
+    contractId,
+    approved,
+    evidence
   );
   await tx.wait();
 }

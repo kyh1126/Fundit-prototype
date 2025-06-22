@@ -31,6 +31,8 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         uint256 deadline;     // 마감 기한
         bool active;          // 활성화 여부
         bool finalized;       // 완료 여부
+        uint256 createdAt;    // 생성 시간
+        uint256 updatedAt;    // 수정 시간
     }
     
     struct Bid {
@@ -41,6 +43,9 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         uint256 coverage;        // 제안 보장 금액
         string terms;            // 보장 조건
         bool active;             // 활성화 여부
+        uint256 createdAt;       // 생성 시간
+        uint256 updatedAt;       // 수정 시간
+        uint256 deadline;        // 입찰 마감 시간
     }
     
     struct Contract {
@@ -57,6 +62,32 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         ContractStatus status;   // 계약 상태
         bool claimed;            // 청구 여부
         bool exists;             // 계약 존재 여부
+        uint256 createdAt;       // 생성 시간
+        uint256 updatedAt;       // 수정 시간
+    }
+    
+    // Oracle 관련 구조체
+    struct Oracle {
+        address oracleAddress;   // Oracle 주소
+        bool isActive;           // 활성 상태
+        uint256 trustScore;      // 신뢰도 점수 (1-100)
+        uint256 verificationCount; // 검증 횟수
+        uint256 successCount;    // 성공 횟수
+        uint256 rewardBalance;   // 보상 잔액
+        uint256 registeredAt;    // 등록 시간
+    }
+    
+    // 리뷰 관련 구조체
+    struct Review {
+        uint256 contractId;     // 계약 ID
+        address reviewer;       // 리뷰어 주소
+        string content;         // 리뷰 내용
+        uint256 rating;         // 평점
+        uint256 timestamp;      // 작성 시간
+        bool exists;            // 존재 여부
+        bool isDeleted;         // 삭제 여부
+        uint256 reportCount;    // 신고 횟수
+        uint256 qualityScore;   // 품질 점수
     }
     
     // 매핑
@@ -71,8 +102,8 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     mapping(address => uint256[]) public companyContracts;       // 보험사별 계약 목록
     
     // Oracle 관련 변수
-    mapping(uint256 => address) public contractOracles;          // 계약별 Oracle
-    mapping(address => bool) public registeredOracles;           // 등록된 Oracle
+    mapping(uint256 => address[]) public contractOracles;        // 계약별 Oracle 목록
+    mapping(address => Oracle) public oracles;                   // Oracle 정보
     mapping(uint256 => bool) public claimsProcessed;            // 처리된 청구
     mapping(uint256 => bool) public claimsApproved;             // 승인된 청구
     mapping(uint256 => uint256) public claimAmounts;            // 청구 금액
@@ -86,32 +117,34 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     mapping(uint256 => bool) public claimAutoRejected;          // 자동 거부 여부
     
     // 리뷰 관련 변수
-    struct Review {
-        uint256 contractId;     // 계약 ID
-        address reviewer;       // 리뷰어 주소
-        string content;         // 리뷰 내용
-        uint256 rating;         // 평점
-        uint256 timestamp;      // 작성 시간
-        bool exists;            // 존재 여부
-    }
-    
     mapping(uint256 => Review) public reviews;                   // 리뷰 정보
     mapping(uint256 => bool) public hasReview;                   // 리뷰 존재 여부
+    mapping(uint256 => mapping(address => bool)) public reviewReports; // 리뷰 신고
     
     // 토큰 컨트랙트
     FunditToken public funditToken;
     
     // 이벤트
     event ProposalCreated(uint256 indexed proposalId, address indexed proposer);
+    event ProposalUpdated(uint256 indexed proposalId, address indexed proposer);
+    event ProposalCancelled(uint256 indexed proposalId, address indexed proposer);
     event BidSubmitted(uint256 indexed proposalId, address indexed bidder, uint256 premium);
+    event BidUpdated(uint256 indexed bidId, address indexed bidder, uint256 premium);
+    event BidCancelled(uint256 indexed bidId, address indexed bidder);
     event ContractCreated(uint256 indexed contractId, uint256 indexed proposalId);
+    event ContractUpdated(uint256 indexed contractId);
+    event ContractCancelled(uint256 indexed contractId);
     event ClaimSubmitted(uint256 indexed contractId, address indexed claimer, uint256 amount);
     event OracleRegistered(address indexed oracle);
     event OracleUnregistered(address indexed oracle);
     event OracleStatusChanged(address indexed oracle, bool status);
+    event OracleRewarded(address indexed oracle, uint256 amount);
     event InsuranceCompanyStatusChanged(address indexed company, bool status);
     event OracleVerificationSubmitted(uint256 indexed contractId, address indexed oracle, bool isValid);
     event ReviewSubmitted(uint256 indexed contractId, address indexed reviewer, string content, uint256 rating);
+    event ReviewUpdated(uint256 indexed contractId, address indexed reviewer);
+    event ReviewDeleted(uint256 indexed contractId, address indexed reviewer);
+    event ReviewReported(uint256 indexed contractId, address indexed reporter);
     event ReviewRewarded(uint256 indexed contractId, address indexed reviewer, uint256 amount);
     
     // 상수
@@ -128,6 +161,8 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     uint256 public constant MAX_CLAIM_AMOUNT = 1000 ether;      // 최대 청구 금액
     uint256 public constant MAX_REJECTION_COUNT = 2;            // 최대 거부 횟수
     uint256 public constant EVIDENCE_REQUIRED_LENGTH = 100;     // 증거 최소 길이
+    uint256 public constant ORACLE_REWARD_AMOUNT = 10 ether;    // Oracle 보상 금액
+    uint256 public constant MAX_ORACLES_PER_CONTRACT = 5;       // 계약당 최대 Oracle 수
     
     enum ContractStatus {
         None,       // 초기 상태
@@ -175,7 +210,9 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
             coverage: coverage,
             deadline: block.timestamp + duration,
             active: true,
-            finalized: false
+            finalized: false,
+            createdAt: block.timestamp,
+            updatedAt: block.timestamp
         });
         
         userProposals[msg.sender].push(newProposalId);
@@ -183,6 +220,42 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         emit ProposalCreated(newProposalId, msg.sender);
         
         return newProposalId;
+    }
+    
+    /**
+     * @dev 제안 수정
+     * @param proposalId 제안 ID
+     * @param title 새로운 제목
+     * @param description 새로운 설명
+     * @param premium 새로운 보험료
+     * @param coverage 새로운 보장 금액
+     */
+    function updateProposal(
+        uint256 proposalId,
+        string memory title,
+        string memory description,
+        uint256 premium,
+        uint256 coverage
+    ) public whenNotPaused nonReentrant {
+        Proposal storage proposal = proposals[proposalId];
+        require(proposal.id > 0, unicode"존재하지 않는 제안입니다");
+        require(proposal.proposer == msg.sender, unicode"제안의 소유자가 아닙니다");
+        require(proposal.active, unicode"제안이 활성화 상태가 아닙니다");
+        require(!proposal.finalized, unicode"이미 완료된 제안입니다");
+        require(proposal.deadline > block.timestamp, unicode"제안 기간이 만료되었습니다");
+        require(bytes(title).length > 0, unicode"제목이 비어있습니다");
+        require(bytes(description).length > 0, unicode"설명이 비어있습니다");
+        require(premium > 0, unicode"보험료는 0보다 커야 합니다");
+        require(coverage > 0, unicode"보장 금액은 0보다 커야 합니다");
+        require(coverage >= premium, unicode"보장 금액은 보험료보다 크거나 같아야 합니다");
+        
+        proposal.title = title;
+        proposal.description = description;
+        proposal.premium = premium;
+        proposal.coverage = coverage;
+        proposal.updatedAt = block.timestamp;
+        
+        emit ProposalUpdated(proposalId, msg.sender);
     }
     
     /**
@@ -198,7 +271,9 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         uint256 coverage,
         uint256 deadline,
         bool active,
-        bool finalized
+        bool finalized,
+        uint256 createdAt,
+        uint256 updatedAt
     ) {
         Proposal memory proposal = proposals[proposalId];
         return (
@@ -210,7 +285,9 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
             proposal.coverage,
             proposal.deadline,
             proposal.active,
-            proposal.finalized
+            proposal.finalized,
+            proposal.createdAt,
+            proposal.updatedAt
         );
     }
     
@@ -220,12 +297,16 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
      */
     function cancelProposal(uint256 proposalId) public whenNotPaused nonReentrant {
         Proposal storage proposal = proposals[proposalId];
-        require(proposal.id > 0, "Proposal does not exist");
-        require(proposal.proposer == msg.sender, "Not proposal owner");
-        require(proposal.active, "Proposal is not active");
-        require(!proposal.finalized, "Proposal is already finalized");
+        require(proposal.id > 0, unicode"존재하지 않는 제안입니다");
+        require(proposal.proposer == msg.sender, unicode"제안의 소유자가 아닙니다");
+        require(proposal.active, unicode"제안이 활성화 상태가 아닙니다");
+        require(!proposal.finalized, unicode"이미 완료된 제안입니다");
+        require(proposal.deadline > block.timestamp, unicode"제안 기간이 만료되었습니다");
         
         proposal.active = false;
+        proposal.updatedAt = block.timestamp;
+        
+        emit ProposalCancelled(proposalId, msg.sender);
     }
     
     // 입찰 관련 함수
@@ -233,7 +314,7 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
      * @dev 보험사 등록
      */
     function registerInsuranceCompany() public whenNotPaused nonReentrant {
-        require(!insuranceCompanies[msg.sender], "Already registered");
+        require(!insuranceCompanies[msg.sender], unicode"이미 등록된 보험사입니다");
         insuranceCompanies[msg.sender] = true;
     }
     
@@ -243,21 +324,24 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
      * @param premium 보험료
      * @param coverage 보장 금액
      * @param terms 보장 조건
+     * @param bidDuration 입찰 기간 (일)
      */
     function placeBid(
         uint256 proposalId,
         uint256 premium,
         uint256 coverage,
-        string memory terms
+        string memory terms,
+        uint256 bidDuration
     ) public whenNotPaused nonReentrant returns (uint256) {
-        require(insuranceCompanies[msg.sender], "Not registered insurance company");
-        require(proposals[proposalId].id > 0, "Proposal does not exist");
-        require(proposals[proposalId].active, "Proposal is not active");
-        require(proposals[proposalId].deadline > block.timestamp, "Proposal deadline has passed");
-        require(premium > 0, "Premium must be greater than 0");
-        require(coverage > 0, "Coverage must be greater than 0");
-        require(coverage >= premium, "Coverage must be greater than or equal to premium");
-        require(bytes(terms).length > 0, "Terms cannot be empty");
+        require(insuranceCompanies[msg.sender], unicode"등록되지 않은 보험사입니다");
+        require(proposals[proposalId].id > 0, unicode"존재하지 않는 제안입니다");
+        require(proposals[proposalId].active, unicode"제안이 활성화 상태가 아닙니다");
+        require(proposals[proposalId].deadline > block.timestamp, unicode"제안 기간이 만료되었습니다");
+        require(premium > 0, unicode"보험료는 0보다 커야 합니다");
+        require(coverage > 0, unicode"보장 금액은 0보다 커야 합니다");
+        require(coverage >= premium, unicode"보장 금액은 보험료보다 크거나 같아야 합니다");
+        require(bytes(terms).length > 0, unicode"보장 조건이 비어있습니다");
+        require(bidDuration >= MIN_BID_DURATION && bidDuration <= MAX_BID_DURATION, unicode"잘못된 입찰 기간입니다");
         
         _bidIds.increment();
         uint256 newBidId = _bidIds.current();
@@ -269,7 +353,10 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
             premium: premium,
             coverage: coverage,
             terms: terms,
-            active: true
+            active: true,
+            createdAt: block.timestamp,
+            updatedAt: block.timestamp,
+            deadline: block.timestamp + bidDuration
         });
         
         proposalBids[proposalId].push(bids[newBidId]);
@@ -278,6 +365,53 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         emit BidSubmitted(proposalId, msg.sender, premium);
         
         return newBidId;
+    }
+    
+    /**
+     * @dev 입찰 수정
+     * @param bidId 입찰 ID
+     * @param premium 새로운 보험료
+     * @param coverage 새로운 보장 금액
+     * @param terms 새로운 보장 조건
+     */
+    function updateBid(
+        uint256 bidId,
+        uint256 premium,
+        uint256 coverage,
+        string memory terms
+    ) public whenNotPaused nonReentrant {
+        Bid storage bid = bids[bidId];
+        require(bid.id > 0, unicode"존재하지 않는 입찰입니다");
+        require(bid.insuranceCompany == msg.sender, unicode"입찰의 소유자가 아닙니다");
+        require(bid.active, unicode"입찰이 활성화 상태가 아닙니다");
+        require(bid.deadline > block.timestamp, unicode"입찰 기간이 만료되었습니다");
+        require(premium > 0, unicode"보험료는 0보다 커야 합니다");
+        require(coverage > 0, unicode"보장 금액은 0보다 커야 합니다");
+        require(bytes(terms).length > 0, unicode"보장 조건이 비어있습니다");
+        
+        bid.premium = premium;
+        bid.coverage = coverage;
+        bid.terms = terms;
+        bid.updatedAt = block.timestamp;
+        
+        emit BidUpdated(bidId, msg.sender, premium);
+    }
+    
+    /**
+     * @dev 입찰 취소
+     * @param bidId 입찰 ID
+     */
+    function cancelBid(uint256 bidId) public whenNotPaused nonReentrant {
+        Bid storage bid = bids[bidId];
+        require(bid.id > 0, unicode"존재하지 않는 입찰입니다");
+        require(bid.insuranceCompany == msg.sender, unicode"입찰의 소유자가 아닙니다");
+        require(bid.active, unicode"입찰이 활성화 상태가 아닙니다");
+        require(bid.deadline > block.timestamp, unicode"입찰 기간이 만료되었습니다");
+        
+        bid.active = false;
+        bid.updatedAt = block.timestamp;
+        
+        emit BidCancelled(bidId, msg.sender);
     }
     
     /**
@@ -291,7 +425,10 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         uint256 premium,
         uint256 coverage,
         string memory terms,
-        bool active
+        bool active,
+        uint256 createdAt,
+        uint256 updatedAt,
+        uint256 deadline
     ) {
         Bid memory bid = bids[bidId];
         return (
@@ -301,7 +438,10 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
             bid.premium,
             bid.coverage,
             bid.terms,
-            bid.active
+            bid.active,
+            bid.createdAt,
+            bid.updatedAt,
+            bid.deadline
         );
     }
     
@@ -311,6 +451,14 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
      */
     function getProposalBids(uint256 proposalId) public view returns (Bid[] memory) {
         return proposalBids[proposalId];
+    }
+    
+    /**
+     * @dev 보험사별 입찰 목록 조회
+     * @param company 보험사 주소
+     */
+    function getCompanyBids(address company) public view returns (uint256[] memory) {
+        return companyBids[company];
     }
     
     // 계약 관련 함수
@@ -328,19 +476,22 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         Proposal storage proposal = proposals[proposalId];
         Bid storage bid = bids[bidId];
         
-        require(proposal.id > 0, "Proposal does not exist");
-        require(proposal.proposer == msg.sender, "Not proposal owner");
-        require(proposal.active, "Proposal is not active");
-        require(!proposal.finalized, "Proposal is already finalized");
-        require(bid.id > 0, "Bid does not exist");
-        require(bid.proposalId == proposalId, "Bid does not match proposal");
-        require(bid.active, "Bid is not active");
-        require(duration >= MIN_CONTRACT_DURATION && duration <= MAX_CONTRACT_DURATION, "Invalid duration");
+        require(proposal.id > 0, unicode"존재하지 않는 제안입니다");
+        require(proposal.proposer == msg.sender, unicode"제안의 소유자가 아닙니다");
+        require(proposal.active, unicode"제안이 활성화 상태가 아닙니다");
+        require(!proposal.finalized, unicode"이미 완료된 제안입니다");
+        require(bid.id > 0, unicode"존재하지 않는 입찰입니다");
+        require(bid.proposalId == proposalId, unicode"입찰이 해당 제안에 속하지 않습니다");
+        require(bid.active, unicode"입찰이 활성화 상태가 아닙니다");
+        require(bid.deadline > block.timestamp, unicode"입찰 기간이 만료되었습니다");
+        require(duration >= MIN_CONTRACT_DURATION && duration <= MAX_CONTRACT_DURATION, unicode"잘못된 계약 기간입니다");
         
         // 제안 및 입찰 상태 업데이트
         proposal.active = false;
         proposal.finalized = true;
+        proposal.updatedAt = block.timestamp;
         bid.active = false;
+        bid.updatedAt = block.timestamp;
         
         // 계약 생성
         _contractIds.increment();
@@ -359,7 +510,9 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
             endDate: block.timestamp + duration,
             status: ContractStatus.Active,
             claimed: false,
-            exists: true
+            exists: true,
+            createdAt: block.timestamp,
+            updatedAt: block.timestamp
         });
         
         userContracts[proposal.proposer].push(newContractId);
@@ -386,7 +539,9 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         uint256 startDate,
         uint256 endDate,
         ContractStatus status,
-        bool claimed
+        bool claimed,
+        uint256 createdAt,
+        uint256 updatedAt
     ) {
         Contract memory contract_ = contracts[contractId];
         return (
@@ -401,8 +556,124 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
             contract_.startDate,
             contract_.endDate,
             contract_.status,
-            contract_.claimed
+            contract_.claimed,
+            contract_.createdAt,
+            contract_.updatedAt
         );
+    }
+    
+    /**
+     * @dev 계약 수정
+     * @param contractId 계약 ID
+     * @param terms 새로운 보장 조건
+     */
+    function updateContract(uint256 contractId, string memory terms) public whenNotPaused nonReentrant {
+        Contract storage contract_ = contracts[contractId];
+        require(contract_.exists, unicode"존재하지 않는 계약입니다");
+        require(contract_.status == ContractStatus.Active, unicode"활성화된 계약만 수정할 수 있습니다");
+        require(
+            contract_.proposer == msg.sender || contract_.insuranceCompany == msg.sender,
+            unicode"계약 당사자만 수정할 수 있습니다"
+        );
+        require(bytes(terms).length > 0, unicode"보장 조건이 비어있습니다");
+        
+        contract_.terms = terms;
+        contract_.updatedAt = block.timestamp;
+        
+        emit ContractUpdated(contractId);
+    }
+    
+    /**
+     * @dev 계약 취소
+     * @param contractId 계약 ID
+     */
+    function cancelContract(uint256 contractId) public whenNotPaused nonReentrant {
+        Contract storage contract_ = contracts[contractId];
+        require(contract_.exists, unicode"존재하지 않는 계약입니다");
+        require(contract_.status == ContractStatus.Active, unicode"활성화된 계약만 취소할 수 있습니다");
+        require(
+            contract_.proposer == msg.sender || contract_.insuranceCompany == msg.sender,
+            unicode"계약 당사자만 취소할 수 있습니다"
+        );
+        require(!contract_.claimed, unicode"이미 처리된 청구입니다");
+        
+        contract_.status = ContractStatus.Cancelled;
+        contract_.updatedAt = block.timestamp;
+        
+        emit ContractCancelled(contractId);
+    }
+    
+    // Oracle 관련 함수
+    /**
+     * @dev Oracle 등록
+     * @param oracle Oracle 주소
+     */
+    function registerOracle(address oracle) external onlyOwner {
+        require(oracle != address(0), unicode"잘못된 Oracle 주소입니다");
+        require(!oracles[oracle].isActive, unicode"이미 등록된 Oracle입니다");
+        
+        oracles[oracle] = Oracle({
+            oracleAddress: oracle,
+            isActive: true,
+            trustScore: 50, // 기본 신뢰도 점수
+            verificationCount: 0,
+            successCount: 0,
+            rewardBalance: 0,
+            registeredAt: block.timestamp
+        });
+        
+        emit OracleRegistered(oracle);
+    }
+    
+    /**
+     * @dev Oracle 등록 해제
+     * @param oracle Oracle 주소
+     */
+    function unregisterOracle(address oracle) external onlyOwner {
+        require(oracles[oracle].isActive, unicode"등록되지 않은 Oracle입니다");
+        oracles[oracle].isActive = false;
+        emit OracleUnregistered(oracle);
+    }
+    
+    /**
+     * @dev Oracle 신뢰도 점수 업데이트
+     * @param oracle Oracle 주소
+     * @param newTrustScore 새로운 신뢰도 점수
+     */
+    function updateOracleTrustScore(address oracle, uint256 newTrustScore) external onlyOwner {
+        require(oracles[oracle].isActive, unicode"등록되지 않은 Oracle입니다");
+        require(newTrustScore <= 100, unicode"신뢰도 점수는 0에서 100 사이여야 합니다");
+        
+        oracles[oracle].trustScore = newTrustScore;
+    }
+    
+    /**
+     * @dev 계약에 Oracle 할당
+     * @param contractId 계약 ID
+     * @param oracleAddresses Oracle 주소 배열
+     */
+    function assignOraclesToContract(uint256 contractId, address[] memory oracleAddresses) external onlyOwner {
+        require(contracts[contractId].exists, unicode"존재하지 않는 계약입니다");
+        require(oracleAddresses.length <= MAX_ORACLES_PER_CONTRACT, unicode"Oracle 수가 너무 많습니다");
+        
+        for (uint256 i = 0; i < oracleAddresses.length; i++) {
+            require(oracles[oracleAddresses[i]].isActive, unicode"활성화되지 않은 Oracle입니다");
+            contractOracles[contractId].push(oracleAddresses[i]);
+        }
+    }
+    
+    /**
+     * @dev Oracle 보상 지급
+     * @param oracle Oracle 주소
+     */
+    function rewardOracle(address oracle) external onlyOwner {
+        require(oracles[oracle].isActive, unicode"활성화되지 않은 Oracle입니다");
+        
+        uint256 reward = ORACLE_REWARD_AMOUNT;
+        oracles[oracle].rewardBalance += reward;
+        oracles[oracle].successCount++;
+        
+        emit OracleRewarded(oracle, reward);
     }
     
     // 보험금 청구 및 지급 관련 함수
@@ -452,7 +723,8 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         bool approved,
         string memory evidence
     ) external nonReentrant whenNotPaused {
-        require(contractOracles[contractId] == msg.sender, unicode"인증된 Oracle만 검증할 수 있습니다");
+        require(contractOracles[contractId].length > 0, unicode"계약에 할당된 Oracle이 없습니다");
+        require(_isOracleAssigned(contractId, msg.sender), unicode"계약에 할당되지 않은 Oracle입니다");
         require(!claimsProcessed[contractId], unicode"이미 처리된 청구입니다");
         require(!oracleVerifications[contractId][msg.sender], unicode"이미 검증한 Oracle입니다");
         require(block.timestamp <= claimTimestamps[contractId] + VERIFICATION_TIMEOUT, unicode"검증 기간이 만료되었습니다");
@@ -462,6 +734,12 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         oracleVerifications[contractId][msg.sender] = true;
         oracleEvidences[contractId][msg.sender] = evidence;
         claimVerificationCounts[contractId]++;
+        
+        // Oracle 통계 업데이트
+        oracles[msg.sender].verificationCount++;
+        
+        // 이벤트 발생
+        emit OracleVerificationSubmitted(contractId, msg.sender, approved);
         
         // 거부 횟수 업데이트
         if (!approved) {
@@ -473,12 +751,29 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
                 _processClaim(contractId, false);
                 return;
             }
+        } else {
+            oracles[msg.sender].successCount++;
         }
         
         // 최소 검증 수를 충족한 경우 청구 처리
         if (claimVerificationCounts[contractId] >= MIN_VERIFICATION_COUNT) {
             _processClaim(contractId, approved);
         }
+    }
+    
+    /**
+     * @dev Oracle이 계약에 할당되었는지 확인
+     * @param contractId 계약 ID
+     * @param oracle Oracle 주소
+     */
+    function _isOracleAssigned(uint256 contractId, address oracle) internal view returns (bool) {
+        address[] memory assignedOracles = contractOracles[contractId];
+        for (uint256 i = 0; i < assignedOracles.length; i++) {
+            if (assignedOracles[i] == oracle) {
+                return true;
+            }
+        }
+        return false;
     }
     
     /**
@@ -501,16 +796,6 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     }
     
     /**
-     * @dev 계약 오라클 설정 (소유자만 가능)
-     * @param contractId 계약 ID
-     * @param oracleAddress 체인링크 오라클 주소
-     */
-    function setContractOracle(uint256 contractId, address oracleAddress) external onlyOwner {
-        require(contracts[contractId].exists, unicode"계약이 존재하지 않습니다");
-        contractOracles[contractId] = oracleAddress;
-    }
-    
-    /**
      * @dev 내부 지급 처리 함수
      * @param contractId 계약 ID
      */
@@ -525,6 +810,133 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
         // 지급 처리 (실제 구현에서는 토큰이나 ETH를 사용)
         // 이 예제에서는 이벤트만 발생시킴
         emit ClaimSubmitted(contractId, recipient, amount);
+    }
+    
+    // 리뷰 관련 함수
+    /**
+     * @dev 보험 계약에 대한 리뷰 제출
+     * @param contractId 계약 ID
+     * @param content 리뷰 내용
+     * @param rating 평점 (1-5)
+     */
+    function submitReview(uint256 contractId, string memory content, uint256 rating) external nonReentrant whenNotPaused {
+        require(contracts[contractId].exists, unicode"계약이 존재하지 않습니다");
+        require(msg.sender == contracts[contractId].proposer, unicode"계약 소유자만 리뷰를 작성할 수 있습니다");
+        require(!hasReview[contractId], unicode"이미 리뷰가 작성되었습니다");
+        require(rating >= 1 && rating <= 5, unicode"평점은 1에서 5 사이여야 합니다");
+        
+        // 품질 점수 계산
+        uint256 contentLength = bytes(content).length;
+        uint256 qualityScore = _calculateQualityScore(contentLength, rating);
+        
+        // Create review
+        reviews[contractId] = Review({
+            contractId: contractId,
+            reviewer: msg.sender,
+            content: content,
+            rating: rating,
+            timestamp: block.timestamp,
+            exists: true,
+            isDeleted: false,
+            reportCount: 0,
+            qualityScore: qualityScore
+        });
+        
+        hasReview[contractId] = true;
+        
+        emit ReviewSubmitted(contractId, msg.sender, content, rating);
+        
+        // Reward the user with tokens
+        if (address(funditToken) != address(0)) {
+            funditToken.rewardReview(msg.sender, content, rating);
+            emit ReviewRewarded(contractId, msg.sender, qualityScore);
+        }
+    }
+    
+    /**
+     * @dev 리뷰 수정
+     * @param contractId 계약 ID
+     * @param newContent 새로운 내용
+     * @param newRating 새로운 평점
+     */
+    function updateReview(uint256 contractId, string memory newContent, uint256 newRating) external nonReentrant whenNotPaused {
+        require(hasReview[contractId], unicode"리뷰가 존재하지 않습니다");
+        require(reviews[contractId].reviewer == msg.sender, unicode"리뷰 작성자가 아닙니다");
+        require(!reviews[contractId].isDeleted, unicode"삭제된 리뷰입니다");
+        require(newRating >= 1 && newRating <= 5, unicode"평점은 1에서 5 사이여야 합니다");
+        
+        Review storage review = reviews[contractId];
+        review.content = newContent;
+        review.rating = newRating;
+        review.qualityScore = _calculateQualityScore(bytes(newContent).length, newRating);
+        
+        emit ReviewUpdated(contractId, msg.sender);
+    }
+    
+    /**
+     * @dev 리뷰 삭제
+     * @param contractId 계약 ID
+     */
+    function deleteReview(uint256 contractId) external nonReentrant whenNotPaused {
+        require(hasReview[contractId], unicode"리뷰가 존재하지 않습니다");
+        require(reviews[contractId].reviewer == msg.sender, unicode"리뷰 작성자가 아닙니다");
+        require(!reviews[contractId].isDeleted, unicode"이미 삭제된 리뷰입니다");
+        
+        reviews[contractId].isDeleted = true;
+        
+        emit ReviewDeleted(contractId, msg.sender);
+    }
+    
+    /**
+     * @dev 리뷰 신고
+     * @param contractId 계약 ID
+     */
+    function reportReview(uint256 contractId) external nonReentrant whenNotPaused {
+        require(hasReview[contractId], unicode"리뷰가 존재하지 않습니다");
+        require(!reviews[contractId].isDeleted, unicode"삭제된 리뷰입니다");
+        require(!reviewReports[contractId][msg.sender], unicode"이미 신고한 리뷰입니다");
+        
+        reviews[contractId].reportCount++;
+        reviewReports[contractId][msg.sender] = true;
+        
+        emit ReviewReported(contractId, msg.sender);
+    }
+    
+    /**
+     * @dev 품질 점수 계산
+     * @param contentLength 내용 길이
+     * @param rating 평점
+     */
+    function _calculateQualityScore(uint256 contentLength, uint256 rating) internal pure returns (uint256) {
+        uint256 qualityScore = 1;
+        
+        // 내용 길이에 따른 점수 조정
+        if (contentLength >= 500) {
+            qualityScore = 10;
+        } else if (contentLength >= 300) {
+            qualityScore = 8;
+        } else if (contentLength >= 200) {
+            qualityScore = 6;
+        } else if (contentLength >= 100) {
+            qualityScore = 4;
+        } else if (contentLength >= 50) {
+            qualityScore = 2;
+        }
+        
+        // 평점에 따른 점수 조정
+        qualityScore = (qualityScore * rating) / 5;
+        
+        return qualityScore;
+    }
+    
+    /**
+     * @dev 보험 계약의 리뷰 조회
+     * @param contractId 계약 ID
+     * @return 리뷰
+     */
+    function getReview(uint256 contractId) external view returns (Review memory) {
+        require(hasReview[contractId], unicode"리뷰가 존재하지 않습니다");
+        return reviews[contractId];
     }
     
     // 관리자 함수
@@ -561,69 +973,6 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
      */
     function setFunditToken(address tokenAddress) external onlyOwner {
         funditToken = FunditToken(tokenAddress);
-    }
-    
-    /**
-     * @dev 보험 계약에 대한 리뷰 제출
-     * @param contractId 계약 ID
-     * @param content 리뷰 내용
-     * @param rating 평점 (1-5)
-     */
-    function submitReview(uint256 contractId, string memory content, uint256 rating) external nonReentrant whenNotPaused {
-        require(contracts[contractId].exists, unicode"계약이 존재하지 않습니다");
-        require(msg.sender == contracts[contractId].proposer, unicode"계약 소유자만 리뷰를 작성할 수 있습니다");
-        require(!hasReview[contractId], unicode"이미 리뷰가 작성되었습니다");
-        require(rating >= 1 && rating <= 5, unicode"평점은 1에서 5 사이여야 합니다");
-        
-        // Create review
-        reviews[contractId] = Review({
-            contractId: contractId,
-            reviewer: msg.sender,
-            content: content,
-            rating: rating,
-            timestamp: block.timestamp,
-            exists: true
-        });
-        
-        hasReview[contractId] = true;
-        
-        emit ReviewSubmitted(contractId, msg.sender, content, rating);
-        
-        // Calculate quality score based on content length and rating
-        uint256 contentLength = bytes(content).length;
-        uint256 qualityScore = 1;
-        
-        // Adjust quality score based on content length
-        if (contentLength >= 500) {
-            qualityScore = 10;
-        } else if (contentLength >= 300) {
-            qualityScore = 8;
-        } else if (contentLength >= 200) {
-            qualityScore = 6;
-        } else if (contentLength >= 100) {
-            qualityScore = 4;
-        } else if (contentLength >= 50) {
-            qualityScore = 2;
-        }
-        
-        // Adjust quality score based on rating
-        qualityScore = (qualityScore * rating) / 5;
-        
-        // Reward the user with tokens
-        if (address(funditToken) != address(0)) {
-            funditToken.rewardReview(msg.sender, content, rating);
-            emit ReviewRewarded(contractId, msg.sender, qualityScore);
-        }
-    }
-    
-    /**
-     * @dev 보험 계약의 리뷰 조회
-     * @param contractId 계약 ID
-     * @return 리뷰
-     */
-    function getReview(uint256 contractId) external view returns (Review memory) {
-        require(hasReview[contractId], "Review does not exist");
-        return reviews[contractId];
     }
     
     /**
@@ -669,27 +1018,6 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     }
 
     /**
-     * @dev Oracle을 등록합니다.
-     * @param oracle Oracle 주소
-     */
-    function registerOracle(address oracle) external onlyOwner {
-        require(oracle != address(0), unicode"유효하지 않은 Oracle 주소입니다");
-        require(!registeredOracles[oracle], unicode"이미 등록된 Oracle입니다");
-        registeredOracles[oracle] = true;
-        emit OracleRegistered(oracle);
-    }
-
-    /**
-     * @dev Oracle을 등록 해제합니다.
-     * @param oracle Oracle 주소
-     */
-    function unregisterOracle(address oracle) external onlyOwner {
-        require(registeredOracles[oracle], unicode"등록되지 않은 Oracle입니다");
-        registeredOracles[oracle] = false;
-        emit OracleUnregistered(oracle);
-    }
-
-    /**
      * @dev 전체 제안 수를 반환합니다.
      * @return 전체 제안 수
      */
@@ -704,48 +1032,45 @@ contract Fundit is Ownable, Pausable, ReentrancyGuard {
     function getContractCount() public view returns (uint256) {
         return _contractIds.current();
     }
-
+    
     /**
-     * @dev Oracle 등록 상태를 설정합니다
+     * @dev 전체 입찰 수를 반환합니다.
+     * @return 전체 입찰 수
+     */
+    function getBidCount() public view returns (uint256) {
+        return _bidIds.current();
+    }
+    
+    /**
+     * @dev Oracle 정보 조회
      * @param oracle Oracle 주소
-     * @param status 등록 상태
      */
-    function setOracleStatus(address oracle, bool status) external onlyOwner {
-        require(oracle != address(0), unicode"유효하지 않은 Oracle 주소입니다");
-        registeredOracles[oracle] = status;
-        emit OracleStatusChanged(oracle, status);
+    function getOracleInfo(address oracle) external view returns (
+        address oracleAddress,
+        bool isActive,
+        uint256 trustScore,
+        uint256 verificationCount,
+        uint256 successCount,
+        uint256 rewardBalance,
+        uint256 registeredAt
+    ) {
+        Oracle memory oracleInfo = oracles[oracle];
+        return (
+            oracleInfo.oracleAddress,
+            oracleInfo.isActive,
+            oracleInfo.trustScore,
+            oracleInfo.verificationCount,
+            oracleInfo.successCount,
+            oracleInfo.rewardBalance,
+            oracleInfo.registeredAt
+        );
     }
-
+    
     /**
-     * @dev 보험금 청구를 제출합니다
+     * @dev 계약에 할당된 Oracle 목록 조회
      * @param contractId 계약 ID
-     * @param amount 청구 금액
      */
-    function submitClaim(uint256 contractId, uint256 amount) external whenNotPaused {
-        require(contracts[contractId].exists, unicode"계약이 존재하지 않습니다");
-        require(contracts[contractId].proposer == msg.sender, unicode"계약 제안자만 청구를 제출할 수 있습니다");
-        require(contracts[contractId].status == ContractStatus.Active, unicode"계약이 활성 상태가 아닙니다");
-        require(amount > 0 && amount <= contracts[contractId].coverage, unicode"청구 금액이 유효하지 않습니다");
-
-        contracts[contractId].status = ContractStatus.UnderReview;
-        claimAmounts[contractId] = amount;
-
-        emit ClaimSubmitted(contractId, msg.sender, amount);
-    }
-
-    /**
-     * @dev Oracle이 검증 결과를 제출합니다
-     * @param contractId 계약 ID
-     * @param isValid 검증 결과
-     */
-    function submitOracleVerification(uint256 contractId, bool isValid) external whenNotPaused {
-        require(contracts[contractId].exists, unicode"계약이 존재하지 않습니다");
-        require(registeredOracles[msg.sender], unicode"등록된 Oracle만 검증을 제출할 수 있습니다");
-        require(contracts[contractId].status == ContractStatus.UnderReview, unicode"계약이 검토 중 상태가 아닙니다");
-        require(!oracleVerifications[contractId][msg.sender], unicode"이미 검증을 제출했습니다");
-
-        oracleVerifications[contractId][msg.sender] = true;
-
-        emit OracleVerificationSubmitted(contractId, msg.sender, isValid);
+    function getContractOracles(uint256 contractId) external view returns (address[] memory) {
+        return contractOracles[contractId];
     }
 }

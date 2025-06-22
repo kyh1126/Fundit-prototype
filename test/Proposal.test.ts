@@ -76,7 +76,7 @@ describe("Proposal", function () {
 
     await expect(
       this.fundit.connect(this.insuranceCompany).cancelProposal(proposalId)
-    ).to.be.revertedWith("Not proposal owner");
+    ).to.be.revertedWith("제안의 소유자가 아닙니다");
 
     const proposal = await this.fundit.proposals(proposalId);
     expect(proposal.active).to.be.true;
@@ -157,10 +157,13 @@ describe("Proposal", function () {
     await ethers.provider.send("evm_increaseTime", [duration + 1]);
     await ethers.provider.send("evm_mine", []);
 
-    // 마감일이 지난 제안을 수동으로 비활성화
-    await this.fundit.connect(this.user).cancelProposal(proposalId);
+    // 마감일이 지난 제안은 수동으로 취소할 수 없음
+    await expect(
+      this.fundit.connect(this.user).cancelProposal(proposalId)
+    ).to.be.revertedWith("제안 기간이 만료되었습니다");
 
+    // 제안은 여전히 활성 상태로 유지됨 (자동 비활성화 기능은 없음)
     const proposal = await this.fundit.proposals(proposalId);
-    expect(proposal.active).to.be.false;
+    expect(proposal.active).to.be.true;
   });
 }); 
